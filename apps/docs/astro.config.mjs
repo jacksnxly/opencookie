@@ -2,7 +2,7 @@ import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
 export default defineConfig({
-  site: "https://opencookie.dev",
+  site: "https://docs.opencookie.dev",
   integrations: [
     starlight({
       title: "OpenCookie",
