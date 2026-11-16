@@ -3086,7 +3086,10 @@ async function svelteWiring(
   ) {
     return { edits: [], files: [{ content, path }] };
   }
-  const wiredSpecifier = content.includes(legacyImportLine)
+  // Trimmed, as validateExistingMarker compares the marked import.
+  const wiredSpecifier = content
+    .split("\n")
+    .some((line) => line.trim() === legacyImportLine.trim())
     ? legacySpecifier
     : specifier;
   if (
