@@ -10,6 +10,9 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
+// Where the documentation is served. Every link to the docs uses it.
+const docsSite = "https://docs.opencookie.dev";
+
 function trackedFiles() {
   return execFileSync("git", ["ls-files", "-z"], {
     cwd: root,
@@ -114,11 +117,27 @@ test("every published package leads back to its source, docs and issues", () => 
       path.posix.dirname(file),
       `${file} repository.directory`,
     );
-    assert.match(manifest.homepage ?? "", /^https:\/\//u, `${file} homepage`);
+    assert.equal(manifest.homepage, docsSite, `${file} homepage`);
     assert.match(
       manifest.bugs?.url ?? "",
       /^https:\/\/github\.com\/[\w.-]+\/opencookie\/issues$/u,
       `${file} bugs.url`,
     );
   }
+});
+
+test("the docs site's canonical address and every link to it agree", () => {
+  const astroConfig = readFileSync(
+    path.join(root, "apps/docs/astro.config.mjs"),
+    "utf8",
+  );
+  assert.equal(astroConfig.match(/^\s*site: "([^"]+)",$/mu)?.[1], docsSite);
+  const contactLinks = readFileSync(
+    path.join(root, ".github/ISSUE_TEMPLATE/config.yml"),
+    "utf8",
+  );
+  assert.ok(
+    contactLinks.includes(`  - name: Documentation\n    url: ${docsSite}\n`),
+    "the issue chooser links to the docs site",
+  );
 });
