@@ -195,7 +195,7 @@ export const DX_CASES = Object.freeze([
     packageManager: "pnpm",
     scaffold: command("pnpm", [
       "dlx",
-      "sv@0.17.0",
+      "sv@1.4.0",
       "create",
       ".",
       "--template",
