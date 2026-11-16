@@ -184,7 +184,7 @@ export default function App({ Component, pageProps }: AppProps) {
   {
     entryPath: "src/routes/+layout.svelte",
     expected: [
-      'import OpenCookieProvider from "$lib/OpenCookieProvider.svelte";',
+      'import OpenCookieProvider from "../lib/OpenCookieProvider.svelte";',
       "<OpenCookieProvider>",
       "{@render children()}",
     ],
@@ -247,6 +247,18 @@ export default function App({ Component, pageProps }: AppProps) {
 `;
 
 describe("autonomous framework wiring", () => {
+  it("leaves a SvelteKit layout wired by an earlier release unchanged", async () => {
+    const layout = `<!-- opencookie:init:generated -->\n<script lang="ts">\n  // opencookie:init:import\n  import OpenCookieProvider from "$lib/OpenCookieProvider.svelte";\n  // /opencookie:init:import\n  let { children } = $props();\n</script>\n\n<OpenCookieProvider>\n  {@render children()}\n</OpenCookieProvider>\n<!-- /opencookie:init:generated -->\n`;
+    const fixture = fixturePorts({
+      "package.json": manifest({ "@sveltejs/kit": "latest" }),
+      "pnpm-lock.yaml": "",
+      "src/routes/+layout.svelte": layout,
+      "svelte.config.js": "export default {};\n",
+    });
+    await initializeProject(fixture.ports, { projectRoot: "/app", yes: true });
+    expect(fixture.files.get("src/routes/+layout.svelte")).toBe(layout);
+  });
+
   it.each(wiringCases)(
     "wires $name and is byte-stable on a second run",
     async ({ entryPath, expected, files: initial }) => {
