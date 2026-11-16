@@ -9,6 +9,14 @@ allowBuilds:
   unrs-resolver@1.12.2: false
 
 linkWorkspacePackages: false
+audit:
+  ignore:
+    # deepmerge: withdrawn upstream, no patched release.
+    - GHSA-gcqx-w48m-w2h4
+    # minimatch: the only fix is minimatch 11, which Verdaccio (local test registry) cannot run on.
+    - GHSA-g3hv-75wg-m249
+    # @nuxt/schema: shipped by @opencookie-dev/nuxt; fixed in that package's next release.
+    - GHSA-mjrq-cffv-q4qc
 overrides:
   "cookie@0.6.0": 0.7.2
   "fast-uri@>=3.0.0 <3.1.9": 3.1.9
