@@ -271,6 +271,20 @@ describe("autonomous framework wiring", () => {
     expect(fixture.files.get("src/routes/+layout.svelte")).toBe(layout);
   });
 
+  it("leaves an earlier-release SvelteKit layout with a reindented import unchanged", async () => {
+    const layout = `<script lang="ts">\n  // opencookie:init:import\n\timport OpenCookieProvider from "$lib/OpenCookieProvider.svelte";\n  // /opencookie:init:import\n  let { children } = $props();\n</script>\n\n<!-- opencookie:init:provider -->\n<OpenCookieProvider>\n  {@render children()}\n</OpenCookieProvider>\n<!-- /opencookie:init:provider -->\n`;
+    const fixture = fixturePorts({
+      "package.json": manifest({ "@sveltejs/kit": "latest" }),
+      "pnpm-lock.yaml": "",
+      "src/routes/+layout.svelte": layout,
+      "svelte.config.js": "export default {};\n",
+    });
+    await expect(
+      initializeProject(fixture.ports, { projectRoot: "/app", yes: true }),
+    ).resolves.toBeDefined();
+    expect(fixture.files.get("src/routes/+layout.svelte")).toBe(layout);
+  });
+
   it("keeps a SvelteKit layout's own $lib imports and wires it once", async () => {
     const fixture = fixturePorts({
       "package.json": manifest({ "@sveltejs/kit": "latest" }),
