@@ -40,7 +40,7 @@
     "svelte": ">=5.40.0 <6.0.0"
   },
   "devDependencies": {
-    "svelte": "5.56.10"
+    "svelte": "5.57.3"
   },
   "engines": {
     "node": ">=18.18.0"

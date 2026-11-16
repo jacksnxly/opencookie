@@ -2,7 +2,7 @@ import type {
   OpenCookieExternalStore,
   OpenCookieSnapshot,
 } from "@opencookie-dev/core";
-import { bootstrapOpenCookieFixture } from "$lib/fixture-client";
+import { bootstrapOpenCookieFixture } from "#lib/fixture-client";
 
 type FixtureSnapshot = Pick<OpenCookieSnapshot, "readiness"> &
   Partial<Pick<OpenCookieSnapshot, "runtime">>;

@@ -14,7 +14,7 @@
     "@opencookie-dev/core": "workspace:*",
     "@opencookie-dev/next": "workspace:*",
     "@opencookie-dev/vanilla": "workspace:*",
-    "next": "16.3.2",
+    "next": "16.4.6",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -23,7 +23,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.2",
+    "eslint-config-next": "16.4.6",
     "typescript": "5.9.3"
   }
 }

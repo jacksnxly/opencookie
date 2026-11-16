@@ -145,7 +145,7 @@ export const DX_CASES = Object.freeze([
     packageManager: "pnpm",
     scaffold: command("pnpm", [
       "dlx",
-      "create-next-app@15.5.9",
+      "create-next-app@15.5.29",
       ".",
       "--ts",
       "--no-eslint",
