@@ -2,7 +2,7 @@
 
 The Next.js client boundary for OpenCookie. This package adds the `"use client"` entry point that Next.js requires for a hook-based library and re-exports the provider and hooks from `@opencookie-dev/react`. It creates no second context and contains no consent-domain behavior.
 
-It supports Next.js 15 and 16, with both the App Router and the Pages Router. Every `pnpm verify` runs a fresh App Router app on Next.js 15.5.29 and both routers on 16.3.2.
+It supports Next.js 15 and 16, with both the App Router and the Pages Router. Every `pnpm verify` runs a fresh App Router app on Next.js 15.5.29 and both routers on 16.4.6.
 
 ## App Router
 

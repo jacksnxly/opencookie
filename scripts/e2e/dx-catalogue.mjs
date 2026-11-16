@@ -82,7 +82,7 @@ export const DX_CASES = Object.freeze([
     packageManager: "pnpm",
     scaffold: command("pnpm", [
       "dlx",
-      "create-next-app@16.3.2",
+      "create-next-app@16.4.6",
       ".",
       "--ts",
       "--no-linter",
@@ -113,7 +113,7 @@ export const DX_CASES = Object.freeze([
     packageManager: "pnpm",
     scaffold: command("pnpm", [
       "dlx",
-      "create-next-app@16.3.2",
+      "create-next-app@16.4.6",
       ".",
       "--ts",
       "--no-linter",
