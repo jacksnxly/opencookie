@@ -6,5 +6,5 @@
     "strict": true
   },
   "include": ["src", "test", "*"],
-  "exclude": ["src/service-worker"]
+  "exclude": ["src/service-worker", "server.mjs"]
 }
