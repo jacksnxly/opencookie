@@ -32,7 +32,7 @@ The playground uses browser-local state and makes no external request.
 
 ## Lockfile scope
 
-`apps/docs/pnpm-lock.yaml` exists for isolated clean-room verification with `pnpm --ignore-workspace --dir apps/docs install --frozen-lockfile`. Inside the full monorepo, pnpm ignores that nested lock and the workspace root `pnpm-lock.yaml` remains authoritative. Any integration that adds this app must regenerate the root lockfile so it contains the `apps/docs` importer.
+The workspace root `pnpm-lock.yaml` is the only lockfile.
 
 ## Deployment
 
