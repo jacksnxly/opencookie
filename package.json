@@ -55,17 +55,17 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@axe-core/playwright": "4.13.0",
-    "@changesets/cli": "3.0.1",
+    "@changesets/cli": "3.0.3",
     "@eslint/js": "10.0.1",
-    "@microsoft/api-extractor": "7.59.0",
+    "@microsoft/api-extractor": "7.60.1",
     "@playwright/test": "1.62.1",
     "@size-limit/file": "13.0.3",
-    "@stryker-mutator/core": "10.0.0",
-    "@stryker-mutator/typescript-checker": "10.0.0",
-    "@stryker-mutator/vitest-runner": "10.0.0",
+    "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/typescript-checker": "10.1.1",
+    "@stryker-mutator/vitest-runner": "10.1.1",
     "@vitest/coverage-v8": "4.1.12",
     "dependency-cruiser": "18.2.0",
-    "eslint": "10.9.0",
+    "eslint": "10.15.0",
     "globals": "17.11.0",
     "happy-dom": "21.0.4",
     "prettier": "3.9.6",
@@ -74,7 +74,7 @@
     "tsdown": "0.22.14",
     "typescript": "5.9.3",
     "typescript-eslint": "8.67.0",
-    "verdaccio": "6.10.0",
+    "verdaccio": "6.11.2",
     "vitest": "4.1.12"
   }
 }

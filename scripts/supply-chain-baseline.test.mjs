@@ -4,8 +4,8 @@ import test from "node:test";
 
 const minimumPatchedVersions = new Map([
   ["cookie", "0.7.0"],
-  ["fast-uri", "3.1.7"],
-  ["qs", "6.16.0"],
+  ["fast-uri", "3.1.9"],
+  ["qs", "6.16.2"],
   ["srvx", "0.11.13"],
 ]);
 
