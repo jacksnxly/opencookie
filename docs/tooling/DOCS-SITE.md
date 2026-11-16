@@ -28,8 +28,37 @@ The API index is generated from the committed API Extractor snapshots by `script
 
 After the static build, `scripts/verify-docs.mjs` crawls built `href` and `src` attributes. Missing local routes, assets, or fragments fail the gate. External links are preserved but are not fetched during the local build.
 
-The playground uses browser-local state and makes no external request. The repository includes no deploy or DNS operation.
+The playground uses browser-local state and makes no external request.
 
 ## Lockfile scope
 
 `apps/docs/pnpm-lock.yaml` exists for isolated clean-room verification with `pnpm --ignore-workspace --dir apps/docs install --frozen-lockfile`. Inside the full monorepo, pnpm ignores that nested lock and the workspace root `pnpm-lock.yaml` remains authoritative. Any integration that adds this app must regenerate the root lockfile so it contains the `apps/docs` importer.
+
+## Deployment
+
+Cloudflare Pages builds and serves the site at `https://docs.opencookie.dev`
+from the `main` branch. The repository holds no deploy credentials; the
+project is connected to GitHub in the Cloudflare dashboard.
+
+| Setting | Value |
+| --- | --- |
+| Production branch | `main` |
+| Framework preset | None |
+| Root directory | empty (the repository root) |
+| Build command | `pnpm install --frozen-lockfile --filter @opencookie-dev/docs && pnpm --filter @opencookie-dev/docs build` |
+| Build output directory | `apps/docs/dist` |
+| Environment variable `NODE_VERSION` | `24.19.0` |
+| Environment variable `PNPM_VERSION` | `11.22.0` |
+| Environment variable `SKIP_DEPENDENCY_INSTALL` | `1` |
+| Preview branches | None |
+
+The build command installs only the docs app, then generates the API page
+from the committed API reports, type-checks the site and builds it. It runs
+in about 30 seconds in a clean `node:24.19.0` container.
+`SKIP_DEPENDENCY_INSTALL` stops Pages from installing the whole workspace
+first. Add the custom domain under the project's **Custom domains** tab;
+because the zone is on Cloudflare, Pages creates the CNAME record itself.
+Sources: [build image](https://developers.cloudflare.com/pages/configuration/build-image/),
+[monorepos](https://developers.cloudflare.com/pages/configuration/monorepos/),
+[custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/),
+[branch build controls](https://developers.cloudflare.com/pages/configuration/branch-build-controls/).
