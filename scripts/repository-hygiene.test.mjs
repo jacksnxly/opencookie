@@ -171,3 +171,21 @@ test("no accepted advisory names a dependency a published package ships", () => 
     );
   }
 });
+
+test("every accepted advisory names the package it affects", () => {
+  // The test above only sees advisories whose comment names a package.
+  const workspace = readFileSync(
+    path.join(root, "pnpm-workspace.yaml"),
+    "utf8",
+  );
+  const ignore = /^audit:\n {2}ignore:\n((?: {4}.*\n)*)/mu.exec(workspace);
+  assert.ok(
+    ignore,
+    "pnpm-workspace.yaml accepts advisories under audit.ignore",
+  );
+  const lines = ignore[1].trimEnd().split("\n");
+  lines.forEach((line, index) => {
+    if (!line.startsWith("    - ")) return;
+    assert.match(lines[index - 1] ?? "", /^ {4}# @?[\w./-]+: \S/u, line.trim());
+  });
+});
