@@ -259,6 +259,38 @@ describe("autonomous framework wiring", () => {
     expect(fixture.files.get("src/routes/+layout.svelte")).toBe(layout);
   });
 
+  it("leaves a SvelteKit layout edited by an earlier release unchanged", async () => {
+    const layout = `<script lang="ts">\n  // opencookie:init:import\n  import OpenCookieProvider from "$lib/OpenCookieProvider.svelte";\n  // /opencookie:init:import\n  let { children } = $props();\n</script>\n\n<!-- opencookie:init:provider -->\n<OpenCookieProvider>\n  {@render children()}\n</OpenCookieProvider>\n<!-- /opencookie:init:provider -->\n`;
+    const fixture = fixturePorts({
+      "package.json": manifest({ "@sveltejs/kit": "latest" }),
+      "pnpm-lock.yaml": "",
+      "src/routes/+layout.svelte": layout,
+      "svelte.config.js": "export default {};\n",
+    });
+    await initializeProject(fixture.ports, { projectRoot: "/app", yes: true });
+    expect(fixture.files.get("src/routes/+layout.svelte")).toBe(layout);
+  });
+
+  it("keeps a SvelteKit layout's own $lib imports and wires it once", async () => {
+    const fixture = fixturePorts({
+      "package.json": manifest({ "@sveltejs/kit": "latest" }),
+      "pnpm-lock.yaml": "",
+      "src/routes/+layout.svelte": `<script lang="ts">\n  import Header from "$lib/Header.svelte";\n  let { children } = $props();\n</script>\n\n<Header />\n{@render children()}\n`,
+      "svelte.config.js": "export default {};\n",
+    });
+    await initializeProject(fixture.ports, { projectRoot: "/app", yes: true });
+    expect(fixture.files.get("src/routes/+layout.svelte")).toBe(
+      `<script lang="ts">\n  // opencookie:init:import\n  import OpenCookieProvider from "../lib/OpenCookieProvider.svelte";\n  // /opencookie:init:import\n  import Header from "$lib/Header.svelte";\n  let { children } = $props();\n</script>\n\n<Header />\n<!-- opencookie:init:provider -->\n<OpenCookieProvider>\n  {@render children()}\n</OpenCookieProvider>\n<!-- /opencookie:init:provider -->\n`,
+    );
+    const snapshot = new Map(fixture.files);
+    const second = await initializeProject(fixture.ports, {
+      projectRoot: "/app",
+      yes: true,
+    });
+    expect(second.status).toBe("unchanged");
+    expect(fixture.files).toEqual(snapshot);
+  });
+
   it.each(wiringCases)(
     "wires $name and is byte-stable on a second run",
     async ({ entryPath, expected, files: initial }) => {
