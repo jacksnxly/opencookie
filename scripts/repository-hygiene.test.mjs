@@ -141,3 +141,33 @@ test("the docs site's canonical address and every link to it agree", () => {
     "the issue chooser links to the docs site",
   );
 });
+
+test("no accepted advisory names a dependency a published package ships", () => {
+  const workspace = readFileSync(
+    path.join(root, "pnpm-workspace.yaml"),
+    "utf8",
+  );
+  const accepted = [
+    ...workspace.matchAll(/^ {4}# (@?[\w./-]+): .*\n {4}- (GHSA-[\w-]+)$/gmu),
+  ].map(([, name, id]) => ({ id, name }));
+  assert.ok(
+    accepted.length > 0,
+    "the accepted advisories are listed with their package",
+  );
+  const shipped = trackedFiles()
+    .filter((file) => /^packages\/(?:[^/]+\/)*package\.json$/u.test(file))
+    .map((file) => JSON.parse(readFileSync(path.join(root, file), "utf8")))
+    .filter((manifest) => manifest.private !== true)
+    .flatMap((manifest) =>
+      Object.keys(manifest.dependencies ?? {}).map(
+        (name) => `${manifest.name} -> ${name}`,
+      ),
+    );
+  for (const { id, name } of accepted) {
+    assert.deepEqual(
+      shipped.filter((entry) => entry.endsWith(` -> ${name}`)),
+      [],
+      `${id} (${name})`,
+    );
+  }
+});
