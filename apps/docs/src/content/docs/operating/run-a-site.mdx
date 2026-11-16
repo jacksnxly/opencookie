@@ -1,0 +1,104 @@
+---
+title: Run a site
+description: Create a site, publish a policy, find what the site loads, classify it, and check that rejection worked.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Installing the runtime is one job; running a site is another. This is the
+operator's side, end to end, with the command line. Nothing here needs the
+library's source.
+
+## Create the site and publish a policy
+
+Three commands reach a live policy:
+
+| Step            | Command                                                                                |
+| --------------- | -------------------------------------------------------------------------------------- |
+| Create the site | `opencookie sites add --name shop --domain shop.example.com`                           |
+| Write a policy  | `opencookie policy starter --site shop`                                                |
+| Publish it      | `opencookie policy publish --site shop --id 2026-09-a --policy opencookie/policy.json` |
+
+Edit the starter's wording first: it describes what a typical site does, not
+what yours does. `opencookie policy preview --site shop --policy opencookie/policy.json`
+shows what visitors would read and what would change against the live policy,
+and writes nothing.
+
+Each site keeps its own policy, findings and evidence, and a hostname belongs to
+exactly one site. Once a project has sites, every command names one.
+
+## Install the policy the site enforces
+
+`opencookie policy install --site shop` writes the project's policy module from
+the publication that is live, and the generated configuration reads its version,
+so what runs is what you published. `opencookie doctor --site shop` reports
+`installed-policy-stale` when the two drift apart, which is the failure that is
+easiest to miss: publishing alone changes nothing a visitor sees.
+
+The module records which site it belongs to. A project has one module at the
+default path, so installing a second site's policy there is refused rather than
+silently changing what the first site enforces. Give each further site its own
+module with `--out`, for example
+`opencookie policy install --site blog --out blog/opencookie.policy.ts`, and have
+that site's application import it.
+
+A site that bundles its own integration with `bootstrapOpenCookie()` installs
+the policy as JSON instead, with an `--out` path ending in `.json`, and passes
+that file to the bootstrap as `installedPolicy`. The bootstrap refuses to mount
+a policy that no longer matches the digests recorded with it. After each build,
+`opencookie doctor --site shop --bundle dist/app.js` says whether the built file
+carries the identity of the live publication; see
+[Check a site that bundles its own integration](/reference/cli/#check-a-site-that-bundles-its-own-integration).
+
+## Find what the site actually loads
+
+Three sources, weakest first. Everything imported stays `unclassified` until you
+decide.
+
+| Source                | Command                                                                                  | What it shows                     |
+| --------------------- | ---------------------------------------------------------------------------------------- | --------------------------------- |
+| A saved page          | `opencookie findings scan --site shop --html page.html --page https://shop.example.com/` | What the markup declares          |
+| A recorded visit      | `opencookie findings session --site shop --har visit.har`                                | What actually reached the network |
+| The browser's storage | `opencookie findings storage --site shop --from storage.json --browser "Safari 26.0"`    | Keys a page left behind           |
+
+A recording is the only one of the three that sees what JavaScript adds at
+runtime, and none of them sees everything: discovery depends on the routes you
+exercise and the browser you use.
+
+## Decide what each finding is
+
+`opencookie findings classify` records the whole decision at once: the purpose,
+the vendor, the service, the data categories, the plain-language disclosure, the
+retention, and what happens on withdrawal. A finding with no decision never
+reaches a policy, and `opencookie findings draft-policy` collects the decided
+ones into a scaffold that names what it still needs.
+
+## Check that rejection worked
+
+Reject everything optional, record that visit, and run
+`opencookie findings check --site shop --har rejected.har`. An optional resource that still
+reached the network is reported and the command exits non-zero. That is a
+failure of enforcement, not a finding to classify. A resource with no decision
+also exits non-zero, because nothing yet says it may load; classify it and check
+again.
+
+## Keep the evidence
+
+Receipts start at the programmatic bootstrap. Pass `receipt` to
+`bootstrapOpenCookie` or `bootstrapOpenCookieFromHead`. After each decision the
+runtime calls that function with the consent receipt and, when it has one, the
+port context. OpenCookie does not queue the receipt and does not send it
+anywhere. The function is where you keep the evidence, for example by writing
+it to a store you control: `bootstrapOpenCookie({ document, receipt: async (receipt) => { await saveReceipt(receipt); } })`.
+
+`opencookie evidence ingest | query | export | delete | retain`, each with
+`--site shop`, holds the
+receipts the runtime produced, in a store only the owner can read. `delete`
+answers an erasure request, and `retain` drops receipts older than the period
+you choose. Both report the real count; zero is an honest answer.
+
+<Aside type="note">
+  OpenCookie is a technical tool, not legal advice. It carries out the policy,
+  retention and erasure you decide. It does not decide them, and it does not
+  certify a site.
+</Aside>

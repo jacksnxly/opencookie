@@ -1,0 +1,123 @@
+/*
+ * OpenCookie template "soft": rounded, quiet, and set in the page's own type.
+ *
+ * Load it after OpenCookie. Every rule is scoped to .oc-root, and the design
+ * tokens sit at zero specificity, so your own rules win. Recolour it with the
+ * --oc-ink, --oc-paper, --oc-muted and --oc-accent tokens, and adjust its
+ * shape with --oc-radius, --oc-border and --oc-shadow. It is a starting point:
+ * the design is yours.
+ */
+:where(.oc-root) {
+  --oc-radius: 14px;
+  --oc-border: color-mix(in srgb, var(--oc-ink) 16%, transparent);
+  --oc-shadow: 0 18px 50px -12px color-mix(in srgb, var(--oc-ink) 28%, transparent);
+}
+.oc-root {
+  font-family: inherit;
+}
+.oc-root .oc-bar,
+.oc-root .oc-panel {
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius);
+  box-shadow: var(--oc-shadow);
+}
+.oc-root .oc-bar {
+  inset: auto 1rem 1rem;
+  max-width: 60rem;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.oc-root .oc-bar-title,
+.oc-root .oc-title {
+  font-family: inherit;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.oc-root .oc-bar-title {
+  font-size: 1.2rem;
+  padding-right: 4.5rem;
+}
+.oc-root .oc-bar-description {
+  margin-top: 0.35rem;
+  font-size: 0.92rem;
+}
+.oc-root .oc-bar-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(36rem, 100%);
+  max-width: 100%;
+  min-width: 0;
+}
+.oc-root .oc-btn {
+  min-height: 2.75rem;
+  border: 1px solid var(--oc-accent);
+  border-radius: calc(var(--oc-radius) - 4px);
+  padding: 0.6rem 1.1rem;
+  font-weight: 600;
+}
+.oc-root .oc-btn.oc-btn--dismiss {
+  top: 0.5rem;
+  right: 0.75rem;
+  min-height: auto;
+  border: 0;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  color: var(--oc-muted);
+  font-weight: 500;
+  text-decoration: none;
+}
+.oc-root .oc-btn.oc-btn--dismiss:hover {
+  background: transparent;
+  color: var(--oc-ink);
+  text-decoration: underline;
+}
+.oc-root .oc-panel {
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+.oc-root .oc-title {
+  max-width: none;
+  font-size: clamp(1.6rem, 3.2vw, 2.25rem);
+}
+.oc-root .oc-purpose {
+  border-color: var(--oc-border);
+  border-radius: calc(var(--oc-radius) - 2px);
+}
+.oc-root .oc-exceptions {
+  border-color: var(--oc-border);
+}
+.oc-root .oc-launcher {
+  border-color: var(--oc-border);
+  border-radius: 999px;
+  box-shadow: var(--oc-shadow);
+}
+@media (max-width: 52.5rem) {
+  .oc-root .oc-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .oc-root .oc-bar-actions,
+  .oc-root .oc-bar-links {
+    grid-column: 1 / -1;
+  }
+  .oc-root .oc-bar-actions {
+    justify-self: stretch;
+    width: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .oc-root .oc-bar-links {
+    grid-row: 3;
+  }
+}
+@media (max-width: 36rem) {
+  .oc-root .oc-bar {
+    inset: auto 0.5rem 0.5rem;
+    padding: 1rem;
+  }
+  .oc-root .oc-bar-actions {
+    width: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .oc-root .oc-bar-actions > [data-oc-action="settings"] {
+    grid-column: 1 / -1;
+  }
+}

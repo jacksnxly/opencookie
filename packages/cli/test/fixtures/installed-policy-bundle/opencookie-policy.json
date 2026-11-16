@@ -1,0 +1,57 @@
+{
+  "generatedBy": "opencookie policy install",
+  "publicationId": "pub-1",
+  "policyVersion": "1.0.0",
+  "catalogueRevision": "catalogue-1",
+  "catalogueDigest": "sha256-v1:c05ce47cfb6471135840bfdd9d3c98fba5d68d4202bef0c94867e47cdea31c4d",
+  "decisionSurfaceDigest": "sha256-v1:f17c10fd419dc9458c216d783904376da6a749ffe13ac734a3094aed7b45d8d1",
+  "policy": {
+    "categories": [
+      {
+        "categoryIds": [],
+        "id": "optional",
+        "purposeIds": ["analytics"]
+      }
+    ],
+    "dataCategories": [
+      {
+        "id": "usage-data"
+      }
+    ],
+    "operations": [
+      {
+        "id": "measurement"
+      }
+    ],
+    "presentationRootCategoryIds": ["optional"],
+    "providers": [
+      {
+        "id": "site-operator"
+      }
+    ],
+    "purposes": [
+      {
+        "dataCategoryIds": ["usage-data"],
+        "operationIds": ["measurement"],
+        "providerIds": ["site-operator"],
+        "recipientIds": ["site-operator"],
+        "retentionIds": ["thirteen-months"],
+        "dependsOn": [],
+        "disclosure": "Counts visits so we can see which pages are read.",
+        "editorialNote": "",
+        "id": "analytics",
+        "label": "Analytics"
+      }
+    ],
+    "recipients": [
+      {
+        "id": "site-operator"
+      }
+    ],
+    "retentions": [
+      {
+        "id": "thirteen-months"
+      }
+    ]
+  }
+}

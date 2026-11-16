@@ -1,0 +1,21 @@
+---
+title: Strict CSP and nonce
+description: Propagate a fresh response nonce into OpenCookie presentation and activated scripts.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+Pass the current response nonce through application wiring and into `bootstrapOpenCookie()`. The bootstrap applies it to the generated presentation style and to executable clones of declaratively blocked scripts. It assigns an element nonce attribute rather than interpolating the value into inline source.
+
+<RunnableSample id="csp-nonce" title="mount-with-nonce.ts" />
+
+When an application creates `mountOpenCookie()` and `createBlockedScriptController()` separately, pass the same response nonce to both. The controller copies safe source attributes and assigns the configured nonce to its executable clone.
+
+<Aside type="note" title="A nonce is per response">
+Do not place a fixed nonce in a checked-in config file. Generate it on the server for each response and pass it through the framework boundary.
+</Aside>
+
+Run your final application with a nonce-only `script-src` and `style-src`, then treat every CSP console error as a product defect.
+
+The [HTML nonce reference](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/nonce), accessed 2026-08-22, describes nonce use with Content Security Policy. Generate an unpredictable value per response and keep it out of checked-in configuration and logs.

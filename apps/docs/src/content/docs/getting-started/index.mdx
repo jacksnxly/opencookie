@@ -1,0 +1,63 @@
+---
+title: Install OpenCookie
+description: Initialize one supported application, review the generated policy, and verify enforcement before release.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+OpenCookie initializes an existing application. Start from a working framework scaffold with one unambiguous package-manager signal and the framework's conventional root entrypoint.
+
+## Verified prerequisites
+
+Use Node.js `>=22.12.0` and pnpm `11.22.0` for the pinned fresh-app workflows. This release candidate is verified with Node.js `24.19.0` and pnpm `11.22.0`. Check both before starting with `node --version` and `pnpm --version`.
+
+Each framework guide lists the exact command sequence exercised by the packed-consumer gate. Start in a new empty directory and run the commands in order. `none` means that stack has no install or build command at that stage. The pinned unattended command is `npx --yes opencookie@0.4.1 init --yes`.
+
+<Steps>
+1. Run `npx opencookie@0.4.1 init` for an interactive confirmation, or `npx --yes opencookie@0.4.1 init --yes` for an unattended local setup.
+2. Review `opencookie.policy.ts`, `opencookie.config.ts`, and the generated provider, plugin, integration, or classic-script block. Every shipped starter, including the compact classic-script path, places Analytics under a real `optional` presentation root. First visit renders a fixed bottom bar with equally weighted Reject all, Accept all, and Settings controls. Settings opens a separate modal panel where the `optional` category choice expands through the domain policy to the Analytics purpose. The starter is an example, not a production catalogue; replace its categories, disclosure, and references with the site's actual declaration. A custom programmatic policy with no `presentationRootCategoryIds` keeps the backwards-compatible flat fallback: one purpose section with no category choice. When roots exist, valid purposes outside the visited category graph remain available in a trailing ungrouped section.
+3. Make every optional script and frame inert in the original HTML. A visible banner alone does not prevent a browser request.
+4. Build the application, serve the build, then test first visit, accept, reject, granular save, withdrawal, reload, policy change, expiry, and any configured privacy signals in a real browser.
+</Steps>
+
+## Serve the build
+
+Each quick start ends at the framework's build command. Use that framework's own command to put the build in front of a browser.
+
+| Stack | Serve the build |
+| --- | --- |
+| Plain HTML | `python3 -m http.server 4173` |
+| React with Vite, Vue with Vite, SvelteKit, Astro | `pnpm preview --host 127.0.0.1 --port 4173` |
+| Next.js App Router, Next.js Pages Router | `pnpm start --hostname 127.0.0.1 --port 4173` |
+| Nuxt | `node .output/server/index.mjs` with `HOST=127.0.0.1` and `PORT=4173` |
+
+Consent decisions are stored per origin, so keep the host and port stable between runs when you are testing reload and restoration.
+
+## What init installs and wires
+
+| Detected project | Installed packages | Generated integration |
+| --- | --- | --- |
+| Plain HTML | No package-manager install | A pinned `@opencookie-dev/vanilla` IIFE block in `index.html` and `.opencookie/snippet.html` |
+| React with Vite | `@opencookie-dev/core`, `@opencookie-dev/react`, `@opencookie-dev/vanilla` | `src/opencookie.tsx` and the recognized `src/main.*` root |
+| Vue with Vite | `@opencookie-dev/core`, `@opencookie-dev/vue`, `@opencookie-dev/vanilla` | `src/opencookie.ts` and the recognized `src/main.*` root |
+| SvelteKit | `@opencookie-dev/core`, `@opencookie-dev/svelte`, `@opencookie-dev/vanilla` | `src/lib/OpenCookieProvider.svelte` and `src/routes/+layout.svelte` |
+| Next.js App Router | `@opencookie-dev/core`, `@opencookie-dev/next`, `@opencookie-dev/vanilla` | A client provider beside `app` or `src/app`, wired through its root layout |
+| Next.js Pages Router | `@opencookie-dev/core`, `@opencookie-dev/next`, `@opencookie-dev/vanilla` | A client provider at `opencookie-provider.tsx` or `src/opencookie-provider.tsx`, wired through `_app` |
+| Nuxt | `@opencookie-dev/core`, `@opencookie-dev/nuxt`, `@opencookie-dev/vanilla` | A store factory, Nuxt module registration, and client-only banner plugin |
+| Astro | `@opencookie-dev/core`, `@opencookie-dev/astro`, `@opencookie-dev/vanilla` | A browser entrypoint and Astro integration registration |
+
+The initializer preflights every target before installing or writing. A second completed run is a no-op. Conflicting files, mixed framework roots, multiple unexplained lockfiles, unrecognized custom renderers, and incomplete OpenCookie markers fail closed.
+
+On every framework path the install step runs your package manager, so the package manager may also touch its own files. pnpm 11 records newly added packages in `minimumReleaseAgeExclude` in `pnpm-workspace.yaml` and prints what it added. That entry belongs to pnpm, not to OpenCookie, and is expected when a `pnpm-workspace.yaml` is present — including the one the Nuxt and Astro quick starts have you create for the build allowlist.
+
+<Aside type="note" title="Published packages">
+`opencookie@0.4.1`, `@opencookie-dev/vanilla@0.4.0`, `@opencookie-dev/core@0.2.4` and `@opencookie-dev/next@0.2.1` are on the public npm registry, and the other `@opencookie-dev` packages are at 0.2.0. Repository verification installs packed local tarballs of the same source, so it does not depend on the registry.
+</Aside>
+
+## Framework scaffold references
+
+The initializer targets the conventional shapes described by these upstream guides, accessed 2026-08-22: [Vite](https://vite.dev/guide/), [Vue](https://vuejs.org/guide/quick-start.html), [SvelteKit](https://svelte.dev/docs/kit/creating-a-project), [Next.js App Router](https://nextjs.org/docs/app/getting-started/installation), [Next.js Pages Router](https://nextjs.org/docs/pages), [Nuxt](https://nuxt.com/docs/4.x/directory-structure/nuxt-config), and [Astro](https://docs.astro.build/en/install-and-setup/).
+
+Continue with the quick start for your stack, then follow [block before consent](/recipes/pre-consent-blocking/), [test the decision lifecycle](/recipes/decision-lifecycle/), and [review accessibility, localization, and theme tokens](/recipes/a11y-i18n-theming/). In particular, text on an `--oc-accent` background uses `--oc-paper`, so test every custom accent and paper pair for contrast.
+
+OpenCookie is a technical tool, not legal advice or a compliance guarantee. The deploying site remains responsible for its policy, catalogue, disclosures, wording, retention, and jurisdiction analysis. Review the [support boundary](/reference/support/) before release.

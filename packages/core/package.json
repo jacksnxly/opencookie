@@ -1,0 +1,96 @@
+{
+  "name": "@opencookie-dev/core",
+  "version": "0.2.4",
+  "description": "Framework-independent OpenCookie domain and application core",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jacksnxly/opencookie.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://opencookie.dev",
+  "bugs": {
+    "url": "https://github.com/jacksnxly/opencookie/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./application": {
+      "import": {
+        "types": "./dist/application.d.ts",
+        "default": "./dist/application.js"
+      },
+      "require": {
+        "types": "./dist/application.d.cts",
+        "default": "./dist/application.cjs"
+      }
+    },
+    "./auto": {
+      "import": {
+        "types": "./dist/auto.d.ts",
+        "default": "./dist/auto.js"
+      },
+      "require": {
+        "types": "./dist/auto.d.cts",
+        "default": "./dist/auto.cjs"
+      }
+    },
+    "./domain": {
+      "import": {
+        "types": "./dist/domain.d.ts",
+        "default": "./dist/domain.js"
+      },
+      "require": {
+        "types": "./dist/domain.d.cts",
+        "default": "./dist/domain.cjs"
+      }
+    },
+    "./infrastructure": {
+      "import": {
+        "types": "./dist/infrastructure.d.ts",
+        "default": "./dist/infrastructure.js"
+      },
+      "require": {
+        "types": "./dist/infrastructure.d.cts",
+        "default": "./dist/infrastructure.cjs"
+      }
+    },
+    "./reconciliation": {
+      "import": {
+        "types": "./dist/reconciliation.d.ts",
+        "default": "./dist/reconciliation.js"
+      },
+      "require": {
+        "types": "./dist/reconciliation.d.cts",
+        "default": "./dist/reconciliation.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

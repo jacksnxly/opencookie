@@ -1,0 +1,3594 @@
+import {
+  checked,
+  createConsentEventBatch,
+  recordConsentDecision,
+  withdrawConsent,
+  type ConsentRecord,
+  type RecordDecisionCommand,
+  type RecordDecisionIssue,
+} from "../../domain/consent-decisioning/runtime.js";
+import { projectConservativePersistenceFailure } from "../persistence/conservative-projection.js";
+import type {
+  ConsentRuntimeDecisionDiagnostic,
+  ConsentRuntimeDecisionResult,
+  ConsentRuntimeTransitionEffect,
+  DenialReceiptDiagnostic,
+  PendingGrantRuntimeTransition,
+} from "./execute-consent-runtime-decision-kernel.js";
+import {
+  executeDenialTransitionProgram,
+  type DenialTransition,
+  type DenialTransitionDiagnostic,
+  type SupersedingDenialTransitionProgram,
+} from "../transitions/execute-denial-transition.js";
+import {
+  initializeConsent,
+  type ConsentInitializationDiagnostic,
+  type PersistedConsentState,
+  type PersistedDecisionRecord,
+} from "./initialize-consent.js";
+import type {
+  ConsentRuntimeAftercareHook,
+  OpenCookie,
+  OpenCookieAdoptionResult,
+  OpenCookieIdKind,
+  OpenCookieKernelOptions,
+  OpenCookiePortContext,
+  OpenCookieReadiness,
+  OpenCookieSnapshot,
+  OpenCookieWithdrawalResult,
+} from "./open-cookie-kernel-contract.js";
+import {
+  projectRuntimeFor,
+  type PreparedRuntimeEffect,
+} from "./consent-runtime-transition-projection-kernel.js";
+import {
+  projectConsentPolicy,
+  projectConsentRuntimeStateWith,
+  type ConsentRuntimeProjection,
+} from "./project-consent-runtime-kernel.js";
+import type { ConsentRuntimeProjectionContext } from "./consent-runtime-projection-context.js";
+import {
+  persistedConsentStatesEqual,
+  snapshotPersistedConsentState,
+  toConsentRecord,
+  toPersistedDecisionRecord,
+} from "./persisted-consent-record.js";
+import {
+  snapshotConsentRuntimeKernelPorts,
+  type CapturedConsentRuntimeKernelPorts,
+} from "./snapshot-consent-runtime-inputs.js";
+
+const STEPS = Object.freeze({
+  expiry: __EXPIRY_STEPS__,
+  grant: __GRANT_STEPS__,
+} as const);
+const EMPTY: readonly [] = Object.freeze([]);
+
+interface Attempt {
+  _: Promise<void> | undefined;
+  A: SignalOwner | undefined;
+  B: CommandIntent | undefined;
+  C: PersistedConsentState | null | undefined;
+  D: Promise<unknown> | undefined;
+  E: boolean;
+  F: "aftercare" | ExpiryPort | undefined;
+  G: Promise<void> | undefined;
+  H: boolean;
+  a: PersistedConsentState;
+  b: ConsentRuntimeTransitionEffect;
+  c: PersistedDecisionRecord;
+  d: ConsentRuntimeProjectionContext;
+  e: ConsentRuntimeTransitionEffect;
+  f: ConsentRuntimeTransitionEffect;
+  g: readonly string[];
+  h: number;
+  i: OpenCookiePortContext | undefined;
+  j: boolean;
+  k: "decision" | "restore";
+  l: readonly (PersistedConsentState | null)[];
+  m: "accept-all" | "granular" | "reject-all" | undefined;
+  n: number;
+  o: boolean;
+  p: CapturedConsentRuntimeKernelPorts;
+  q: Promise<ConsentRuntimeDecisionResult> | undefined;
+  r: number | undefined;
+  s: PersistedConsentState;
+  t: string;
+  u: boolean;
+  v: Promise<boolean> | undefined;
+  w: boolean;
+  x: boolean;
+  y: 0 | 1;
+  z: readonly ConsentRuntimeDecisionDiagnostic[] | undefined;
+}
+
+type CorrectionCompletion = () => Promise<ConsentRuntimeDecisionResult>;
+type GrantRunResult = ConsentRuntimeDecisionResult | CorrectionCompletion;
+
+type GrantActivationResult =
+  | {
+      readonly code:
+        | "grant-activation-conflict"
+        | "grant-activation-unconfirmed"
+        | "grant-expired-before-activation"
+        | "grant-policy-mismatch-before-activation";
+      readonly settle?: () => Promise<void>;
+    }
+  | { readonly error: unknown; readonly settle?: () => Promise<void> }
+  | {
+      readonly effect: ConsentRuntimeTransitionEffect;
+      readonly state: PersistedConsentState;
+    };
+
+interface Expiry {
+  c: { broadcast: boolean; reconcile: boolean };
+  e: ConsentRuntimeTransitionEffect;
+  o: SignalOwner;
+  p: CapturedConsentRuntimeKernelPorts;
+  q: Promise<void> | undefined;
+}
+
+type ExpiryPort = "broadcast" | "reconcile";
+
+interface CapturedFailure {
+  readonly error: unknown;
+}
+
+interface ActiveExpiry {
+  a: Expiry;
+  p: ExpiryPort;
+}
+
+type Prepared =
+  | { i: readonly RecordDecisionIssue[]; k: "bad" }
+  | { k: "same" }
+  | { c: PersistedDecisionRecord; e: ConsentRuntimeTransitionEffect; k: "terminal" }
+  | {
+      b: ConsentRuntimeProjection;
+      c: PersistedDecisionRecord;
+      d: ConsentRuntimeProjectionContext;
+      e: ConsentRuntimeTransitionEffect;
+      k: "grant";
+    };
+
+type TerminalDecisionResult =
+  | {
+      readonly effect: ConsentRuntimeTransitionEffect;
+      readonly outcome: "committed";
+      readonly transition: DenialTransition;
+    }
+  | {
+      readonly diagnostics: readonly (
+        | DenialReceiptDiagnostic
+        | DenialTransitionDiagnostic
+      )[];
+      readonly effect: ConsentRuntimeTransitionEffect;
+      readonly outcome: "degraded";
+      readonly transition: DenialTransition;
+    };
+
+interface SignalOwner {
+  d?: true;
+  e: ConsentRuntimeTransitionEffect;
+  f?: Partial<Record<ExpiryPort, true | undefined>>;
+  g?: true;
+  h?: CapturedConsentRuntimeKernelPorts;
+  readonly n: number;
+  v: number;
+}
+
+interface CommandIntent {
+  a?: true;
+  b?: true;
+  c?: Promise<void>;
+  d?: true;
+  e?: Promise<void>;
+  f?: () => void;
+  g?: ConsentRuntimeTransitionEffect;
+  h?: "aftercare" | ExpiryPort;
+  j?: readonly PersistedConsentState[];
+  k?: readonly PersistedConsentState[];
+  l?: true;
+  m?: true;
+  o?: boolean;
+  p?: Attempt;
+  q?: Promise<void>;
+  r?: true;
+  s?: TerminalReservationSignals;
+  t?: string;
+  u?: () => void;
+  v?: PersistedConsentState | null;
+  w?: Promise<void>;
+  x?: boolean;
+  y?: number;
+  z?: CommandIntent;
+  readonly n: number;
+}
+
+interface TerminalReservationSignals {
+  b?: CapturedFailure;
+  readonly e: ConsentRuntimeTransitionEffect;
+  readonly o: SignalOwner;
+  readonly p: CapturedConsentRuntimeKernelPorts;
+  q: Promise<void>;
+  r?: CapturedFailure;
+  x?: true;
+}
+
+interface PersistedBase {
+  readonly adopted: boolean;
+  readonly record: ConsentRecord | undefined;
+  readonly state: PersistedConsentState | null;
+}
+
+interface TerminalTask extends SignalOwner {
+  readonly c: PersistedConsentState;
+  readonly i: CommandIntent;
+  readonly p: CapturedConsentRuntimeKernelPorts;
+  readonly r: number | undefined;
+  s: Promise<void> | undefined;
+}
+
+type SupersedingTerminalProgram = SupersedingDenialTransitionProgram<
+  PersistedConsentState,
+  ConsentRuntimeTransitionEffect,
+  TerminalDecisionResult
+>;
+
+type TerminalPlan<Result> = Readonly<{ completion: Promise<Result> }>;
+
+function completed<Result>(result: Result): TerminalPlan<Result> {
+  return { completion: Promise.resolve(result) };
+}
+
+function same(
+  left: PersistedConsentState | null,
+  right: PersistedConsentState | null,
+) {
+  return left === null || right === null
+    ? left === right
+    : persistedConsentStatesEqual(left, right);
+}
+
+function unique(states: readonly (PersistedConsentState | null)[]) {
+  return Object.freeze(
+    states.filter(
+      (state, index) => states.findIndex((candidate) => same(candidate, state)) === index,
+    ),
+  );
+}
+
+function frontier(states: readonly (PersistedConsentState | null)[]) {
+  return Object.freeze(unique(states).slice(0, 3));
+}
+
+function recordTime(record: ConsentRecord | PersistedDecisionRecord) {
+  return record.withdrawnAt ?? record.decidedAt;
+}
+
+function stateTime(state: PersistedConsentState | null) {
+  if (!state) return 0;
+  const pending = state.pendingGrant;
+  return Math.max(
+    state.record ? recordTime(state.record) : 0,
+    pending?.kind === "decision"
+      ? Math.max(recordTime(pending.candidate), pending.receiptOccurredAt)
+      : 0,
+  );
+}
+
+function grantedPurposeIds(record: PersistedDecisionRecord) {
+  return Object.freeze(
+    Object.keys(record.decisions)
+      .filter((purposeId) => record.decisions[purposeId] === "granted")
+      .sort(),
+  );
+}
+
+function effectivePersistedRecord(
+  record: ConsentRecord,
+  runtime: ConsentRuntimeProjection,
+) {
+  return Object.freeze({
+    ...toPersistedDecisionRecord(record),
+    decisions: Object.freeze(
+      Object.fromEntries(
+        runtime.accessConsent.decisions.map(
+          ({ decision, purposeId }) =>
+            [
+              purposeId,
+              decision === "granted" ? "granted" : "denied",
+            ] as const,
+        ),
+      ),
+    ),
+  });
+}
+
+function grantsAccess(effect: ConsentRuntimeTransitionEffect) {
+  return effect.runtime.accessConsent.decisions.some(
+    ({ decision }) => decision === "granted",
+  );
+}
+
+function identifier(value: string, kind: OpenCookieIdKind) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new TypeError(`Generated ${kind} identifier cannot be blank.`);
+  }
+  return value.trim();
+}
+
+function frozenState(input: PersistedConsentState) {
+  const captured = snapshotPersistedConsentState(input);
+  if (!captured.ok) throw new TypeError("Invalid pending grant state.");
+  return captured.state;
+}
+
+function effect(
+  prepared: PreparedRuntimeEffect,
+  persistenceStatus: ConsentRuntimeTransitionEffect["persistenceStatus"],
+  transitionId: string,
+): ConsentRuntimeTransitionEffect {
+  return Object.freeze({ ...prepared, persistenceStatus, transitionId });
+}
+
+function descriptor(
+  prepared: Extract<Prepared, { k: "grant" }>,
+  staged: PersistedConsentState,
+  receipt: number,
+  transitionId: string,
+): Attempt {
+  const candidate = prepared.c;
+  const record = toConsentRecord(candidate);
+  const active = frozenState({ record: candidate });
+  const prior = staged.record ? toConsentRecord(staged.record) : null;
+  return {
+    _: undefined,
+    A: undefined,
+    B: undefined,
+    C: undefined,
+    D: undefined,
+    E: false,
+    F: undefined,
+    G: undefined,
+    H: false,
+    a: active,
+    b: effect(
+      Object.freeze({ events: EMPTY, record, runtime: prepared.b }),
+      "pending",
+      transitionId,
+    ),
+    c: candidate,
+    d: prepared.d,
+    e: prepared.e,
+    f: effect(
+      Object.freeze({
+        events: createConsentEventBatch({
+          committed: true,
+          previousRecord: prior,
+          record,
+        }),
+        record,
+        runtime: prepared.e.runtime,
+      }),
+      "confirmed",
+      transitionId,
+    ),
+    g: EMPTY,
+    h: receipt,
+    i: undefined,
+    j: false,
+    k: "decision",
+    l: Object.freeze([staged]),
+    m: undefined,
+    n: 0,
+    o: false,
+    p: undefined as unknown as CapturedConsentRuntimeKernelPorts,
+    q: undefined,
+    r: receipt,
+    s: staged,
+    t: transitionId,
+    u: false,
+    v: undefined,
+    w: false,
+    x: false,
+    y: 0,
+    z: undefined,
+  };
+}
+
+function resumed(
+  state: PersistedConsentState,
+  context: ConsentRuntimeProjectionContext,
+  at: number,
+): Attempt {
+  const pending = state.pendingGrant;
+  if (!pending) throw new TypeError("Pending grant state is required.");
+  if (pending.kind === "decision") {
+    const candidate = pending.candidate;
+    const record = toConsentRecord(candidate);
+    const runtime = projectRuntimeFor(context, record, at);
+    const attempt = descriptor(
+      {
+        b: projectRuntimeFor(context, undefined, at),
+        c: candidate,
+        d: context,
+        e: effect(
+          Object.freeze({ events: EMPTY, record, runtime }),
+          "pending",
+          pending.transitionId,
+        ),
+        k: "grant",
+      },
+      state,
+      pending.receiptOccurredAt,
+      pending.transitionId,
+    );
+    attempt.g =
+      candidate.method === "granular" ? grantedPurposeIds(candidate) : EMPTY;
+    attempt.m = candidate.method === "granular" ? "granular" : "accept-all";
+    return attempt;
+  }
+  if (!state.record) throw new TypeError("Restore-pending grant state is required.");
+  const record = toConsentRecord(state.record);
+  const runtime = projectRuntimeFor(context, record, at);
+  return {
+    _: undefined,
+    A: undefined,
+    B: undefined,
+    C: undefined,
+    D: undefined,
+    E: false,
+    F: undefined,
+    G: undefined,
+    H: false,
+    a: frozenState({ record: state.record }),
+    b: effect(
+      Object.freeze({
+        events: EMPTY,
+        record,
+        runtime: projectRuntimeFor(context, undefined, at),
+      }),
+      "pending",
+      pending.transitionId,
+    ),
+    c: state.record,
+    d: context,
+    e: effect(Object.freeze({ events: EMPTY, record, runtime }), "pending", pending.transitionId),
+    f: effect(Object.freeze({ events: EMPTY, record, runtime }), "confirmed", pending.transitionId),
+    g: EMPTY,
+    h: Math.max(at, recordTime(state.record)),
+    i: undefined,
+    j: false,
+    k: "restore",
+    l: Object.freeze([state]),
+    m: undefined,
+    n: 0,
+    o: false,
+    p: undefined as unknown as CapturedConsentRuntimeKernelPorts,
+    q: undefined,
+    r: undefined,
+    s: state,
+    t: pending.transitionId,
+    u: false,
+    v: undefined,
+    w: false,
+    x: false,
+    y: 0,
+    z: undefined,
+  };
+}
+
+type StageWriteGuard = (expected: PersistedConsentState | null) => boolean;
+
+async function write(
+  store: CapturedConsentRuntimeKernelPorts["store"],
+  expected: readonly (PersistedConsentState | null)[],
+  candidate: PersistedConsentState,
+  guard?: StageWriteGuard,
+) {
+  for (const predecessor of unique(expected)) {
+    if (guard && !guard(predecessor)) {
+      return { f: "grant-write-conflict" as const, p: predecessor };
+    }
+    try {
+      const result = await store.compareAndSet(predecessor, candidate);
+      if (result.status === "conflict") continue;
+      if (result.status !== "written") {
+        return {
+          f: "grant-readback-mismatch" as const,
+          p: predecessor,
+          u: true as const,
+        };
+      }
+      const readback = await store.read();
+      if (readback.status === "missing") {
+        return {
+          f: "grant-readback-missing" as const,
+          p: predecessor,
+          u: true as const,
+        };
+      }
+      if (readback.status !== "stored") {
+        return {
+          f: "grant-readback-invalid" as const,
+          p: predecessor,
+          u: true as const,
+        };
+      }
+      const captured = snapshotPersistedConsentState(readback.state);
+      if (captured.ok && persistedConsentStatesEqual(captured.state, candidate)) {
+        return {};
+      }
+      return captured.ok && persistedConsentStatesEqual(captured.state, predecessor)
+        ? { f: "grant-readback-mismatch" as const, p: predecessor }
+        : {
+            f: "grant-readback-mismatch" as const,
+            p: predecessor,
+            u: true as const,
+          };
+    } catch {
+      try {
+        const observed = await store.read();
+        const active = unique([candidate, ...expected]).find((state) =>
+          matches(observed, state),
+        );
+        return {
+          f: "grant-write-failed" as const,
+          p: active === undefined ? predecessor : active,
+          ...(active === undefined ? { u: true as const } : {}),
+        };
+      } catch {
+        return {
+          f: "grant-write-failed" as const,
+          p: predecessor,
+          u: true as const,
+        };
+      }
+    }
+  }
+  return { f: "grant-write-conflict" as const };
+}
+
+async function clearFailedStage(
+  store: CapturedConsentRuntimeKernelPorts["store"],
+  states: readonly (PersistedConsentState | null)[],
+  candidate: PersistedConsentState | undefined,
+  effective: PersistedDecisionRecord,
+  cancelled?: () => boolean,
+): Promise<
+  readonly [
+    cleared: boolean,
+    remaining: readonly (PersistedConsentState | null)[],
+    diagnostic?: ConsentRuntimeDecisionDiagnostic,
+  ]
+> {
+  let failed = false;
+  let status: Awaited<ReturnType<typeof store.clearIfCurrent>> | undefined;
+  let unconfirmed = false;
+  let unsafe = false;
+  const retained: PersistedConsentState[] = [];
+  const retainedCandidate: PersistedConsentState[] = [];
+  const cleanupFrontier = frontier([
+    ...(candidate === undefined ? EMPTY : [candidate]),
+    ...states,
+  ]);
+  for (const [index, state] of cleanupFrontier.entries()) {
+    if (cancelled?.()) {
+      return [
+        false,
+        frontier([
+          ...retained,
+          ...retainedCandidate,
+          ...cleanupFrontier.slice(index),
+        ]),
+      ];
+    }
+    if (!state) continue;
+    const isCandidate = candidate !== undefined && same(state, candidate);
+    if (!isCandidate) {
+      if (!mustClearFailedStageExpected(state, effective)) {
+        retained.push(state);
+        continue;
+      }
+      unsafe = true;
+    }
+    try {
+      status = await store.clearIfCurrent(state);
+    } catch {
+      failed = true;
+      (isCandidate ? retainedCandidate : retained).push(state);
+      continue;
+    }
+    if (status === "cleared") return [true, EMPTY];
+    if (status === "readback-mismatch") {
+      unconfirmed = true;
+      (isCandidate ? retainedCandidate : retained).push(state);
+    }
+  }
+  const remaining = frontier([...retained, ...retainedCandidate]);
+  if (status === undefined && !failed && !unconfirmed) {
+    return [false, remaining];
+  }
+  if (status === "conflict" && !unsafe && !failed && !unconfirmed) {
+    return [false, remaining];
+  }
+  return [
+    false,
+    remaining,
+    {
+      code: failed
+        ? "grant-clear-failed"
+        : status === "conflict" && !unconfirmed
+          ? "grant-clear-conflict"
+          : "grant-clear-unconfirmed",
+    },
+  ];
+}
+
+function mustClearFailedStageExpected(
+  state: PersistedConsentState | null,
+  effective: PersistedDecisionRecord,
+) {
+  if (!state) return false;
+  if (state.pendingGrant) return true;
+  const record = state.record;
+  return (
+    !!record &&
+    Object.entries(record.decisions).some(
+      ([purposeId, decision]) =>
+        decision === "granted" &&
+        (record.expiresAt > effective.expiresAt ||
+          effective.decisions[purposeId] !== "granted"),
+    )
+  );
+}
+
+function matches(
+  observed: Awaited<ReturnType<CapturedConsentRuntimeKernelPorts["store"]["read"]>>,
+  expected: PersistedConsentState | null,
+) {
+  if (observed.status === "missing") return expected === null;
+  if (observed.status !== "stored" || expected === null) return false;
+  const captured = snapshotPersistedConsentState(observed.state);
+  return captured.ok && persistedConsentStatesEqual(captured.state, expected);
+}
+
+async function restage(
+  store: CapturedConsentRuntimeKernelPorts["store"],
+  expected: readonly (PersistedConsentState | null)[],
+  candidate: PersistedConsentState,
+  guard?: StageWriteGuard,
+  acceptConfirmedMissing = false,
+) {
+  let observed: Awaited<ReturnType<typeof store.read>>;
+  try {
+    observed = await store.read();
+  } catch {
+    return { f: "grant-readback-invalid" as const };
+  }
+  if (matches(observed, candidate)) return {};
+  const predecessor =
+    acceptConfirmedMissing && observed.status === "missing"
+      ? null
+      : unique([candidate, ...expected]).find((state) =>
+          matches(observed, state),
+        );
+  if (predecessor === undefined) {
+    return { f: "grant-write-conflict" as const, u: true as const };
+  }
+  const result = await write(store, [predecessor], candidate, guard);
+  return result.f !== undefined && result.p === undefined
+    ? { ...result, p: predecessor }
+    : result;
+}
+
+export function createOpenCookieKernel(
+  options: OpenCookieKernelOptions,
+  captureAftercare: () => ConsentRuntimeAftercareHook,
+  projectionInput:
+    | ConsentRuntimeProjectionContext
+    | (() => ConsentRuntimeProjectionContext),
+): OpenCookie & {
+  readonly adoptStoredDecision: () => Promise<OpenCookieAdoptionResult>;
+} {
+  if (!Number.isSafeInteger(options.consentDurationMs) || options.consentDurationMs < 1) {
+    throw new TypeError("Consent duration must be a positive safe integer.");
+  }
+  const context = typeof projectionInput === "function" ? projectionInput() : projectionInput;
+  const nowPort = options.now;
+  let highWater = checked(
+    Math.max(
+      options.initialTime ?? 0,
+      options.initialRecord ? recordTime(options.initialRecord) : 0,
+    ),
+    "Initial time",
+  );
+  const now = () =>
+    (highWater = Math.max(
+      highWater,
+      checked(Reflect.apply(nowPort, options, []), "Current time"),
+    ));
+  const commandContext = (at: number) => ({
+    now: at,
+    policyHistory: context.policyHistory,
+    policySnapshot: context.policySnapshot,
+    ...(context.privacyRestrictions === undefined
+      ? {}
+      : { privacyRestrictions: context.privacyRestrictions }),
+    resourcePolicy: context.resourcePolicy,
+    ...(context.servicePreferences === undefined
+      ? {}
+      : { servicePreferences: context.servicePreferences }),
+  });
+  const runtimeFor = (record: ConsentRecord | undefined, at: number) =>
+    projectConsentRuntimeStateWith(
+      { ...(record === undefined ? {} : { consentRecord: record }), ...commandContext(at) },
+      context.projectPolicy,
+      context.resolveAccess,
+    );
+  const reproject = (
+    attempt: Attempt,
+    at = Math.max(now(), attempt.h),
+  ) => {
+    const safe = projectConservativePersistenceFailure(
+      effectivePersistedRecord(attempt.b.record, attempt.b.runtime),
+      toPersistedDecisionRecord(attempt.b.record),
+    ).effectiveRecord;
+    attempt.b = Object.freeze({
+      ...attempt.b,
+      runtime: projectRuntimeFor(attempt.d, toConsentRecord(safe), at),
+    });
+    attempt.e = Object.freeze({
+      ...attempt.e,
+      runtime: projectRuntimeFor(attempt.d, attempt.e.record, at),
+    });
+    return at;
+  };
+  const listeners = new Set<() => void>();
+  const attempts = new Set<Attempt>();
+  let currentRecord = options.initialRecord;
+  let currentState: PersistedConsentState | null = null;
+  let pending: Attempt | undefined;
+  let staging: Attempt | undefined;
+  let reserved: Attempt | undefined;
+  let running: Attempt | undefined;
+  let invoking: Attempt | undefined;
+  let invokingPort: "aftercare" | ExpiryPort | undefined;
+  let expiry: Expiry | undefined;
+  let activeExpiry: ActiveExpiry | undefined;
+  let invokingExpiry = false;
+  let expiryPreparing = false;
+  let initialized = false;
+  let initialization: Promise<OpenCookieSnapshot> | undefined;
+  let initializationPending: ConsentRuntimeDecisionResult | undefined;
+  let signalGeneration = 0;
+  let signalOwner: SignalOwner | undefined;
+  let commandGeneration = 0;
+  let authorityOrder = 0;
+  let authorityIntent: CommandIntent | undefined;
+  let initializingTerminal: CommandIntent | undefined;
+  let terminalPending: TerminalTask | undefined;
+  let signalRetry: Promise<void> | undefined;
+  let retryingSignals = false;
+  let terminalStoreTail = Promise.resolve();
+  let terminalAftercareTail = Promise.resolve();
+  let stateTail = Promise.resolve();
+  let signalTail = Promise.resolve();
+  const prompt = (runtime: ConsentRuntimeProjection) =>
+    runtime.policyReconciliation?.prompt ?? runtime.consentEvaluation.prompt;
+  const makeSnapshot = (
+    readiness: OpenCookieReadiness,
+    runtime: ConsentRuntimeProjection,
+    persistence?: ConsentRuntimeTransitionEffect["persistenceStatus"],
+    diagnostics: readonly ConsentInitializationDiagnostic[] = EMPTY,
+    preferencesOpen = prompt(runtime),
+    record = currentRecord,
+  ): OpenCookieSnapshot =>
+    Object.freeze({
+      diagnostics: Object.freeze([...diagnostics]),
+      grantActivation: pending
+        ? "pending"
+        : currentRecord &&
+            currentRecord.method !== "withdrawal" &&
+            (runtime.policyReconciliation?.status === "current" ||
+              runtime.policyReconciliation?.status === "requires-reconsent") &&
+            runtime.accessConsent.decisions.some(({ decision }) => decision === "granted")
+          ? "active"
+          : "not-applicable",
+      ...(persistence === undefined ? {} : { lastPersistenceStatus: persistence }),
+      ...(pending
+        ? {
+            pendingGrant: Object.freeze({
+              grantedPurposeIds: grantedPurposeIds(pending.c),
+              phase: pending.z ? "persistence" : "broadcast",
+              transitionId: pending.t,
+            }),
+          }
+        : {}),
+      policySnapshot: context.policySnapshot,
+      preferencesOpen,
+      readiness,
+      ...(record === undefined ? {} : { record }),
+      runtime,
+    });
+  const serverSnapshot = makeSnapshot("uninitialized", runtimeFor(currentRecord, highWater));
+  let snapshot = serverSnapshot;
+  const publish = () => {
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch (error) {
+        options.onListenerError?.(error);
+      }
+    }
+  };
+  const queue = <Result>(lane: 0 | 1, operation: () => Promise<Result> | Result) => {
+    const result = (lane ? signalTail : stateTail).then(operation);
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    if (lane) signalTail = settled;
+    else stateTail = settled;
+    return result;
+  };
+  const queueTerminalAftercare = <Result>(operation: () => Promise<Result>) => {
+    const result = terminalAftercareTail.then(operation);
+    terminalAftercareTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+  const ports = () =>
+    snapshotConsentRuntimeKernelPorts({
+      aftercare: captureAftercare(),
+      broadcast: options.broadcast ?? (() => Promise.resolve()),
+      commit: () => undefined,
+      notify: () => undefined,
+      reconcile: options.reconcile ?? (() => Promise.resolve()),
+      store: options.store,
+    });
+  const claimSignal = (transitionEffect: ConsentRuntimeTransitionEffect) => {
+    const owner: SignalOwner = {
+      e: transitionEffect,
+      n: (signalGeneration += 1),
+      v: 0,
+    };
+    signalOwner = owner;
+    return owner;
+  };
+  const updateSignal = (
+    owner: SignalOwner | undefined,
+    transitionEffect: ConsentRuntimeTransitionEffect,
+  ) => {
+    if (owner && owner.e !== transitionEffect) {
+      owner.e = transitionEffect;
+      owner.v += 1;
+    }
+  };
+  const reserveAttempt = (attempt: Attempt, activate = true) => {
+    attempts.add(attempt);
+    if (activate) pending = attempt;
+    else staging = attempt;
+    if (!attempt.A) {
+      attempt.A = claimSignal(attempt.b);
+      attempt.A.d = true;
+      attempt.A.g = true;
+    }
+  };
+  const stageGuard = (attempt: Attempt): StageWriteGuard => (expected) => {
+    attempt.C = expected;
+    return !attempt.x;
+  };
+  const trackStage = <Result>(attempt: Attempt, completion: Promise<Result>) => {
+    attempt.D = completion;
+    const clear = () => {
+      if (attempt.D === completion) attempt.D = undefined;
+    };
+    void completion.then(clear, clear);
+    return completion;
+  };
+  const isTerminalTask = (owner: SignalOwner): owner is TerminalTask =>
+    "i" in owner;
+  const grantAuthority = (owner: SignalOwner | undefined) =>
+    owner !== undefined && (owner.g === true || grantsAccess(owner.e));
+  const canSignal = (
+    owner: SignalOwner,
+    transitionEffect: ConsentRuntimeTransitionEffect,
+  ) =>
+    signalOwner === owner ||
+    (isTerminalTask(owner) &&
+      signalOwner !== undefined &&
+      !grantsAccess(owner.e) &&
+      !grantAuthority(signalOwner)) ||
+    (!isTerminalTask(owner) &&
+      grantAuthority(signalOwner) &&
+      !grantsAccess(transitionEffect));
+  const repairPort = async (
+    owner: SignalOwner,
+    captured: CapturedConsentRuntimeKernelPorts,
+    port: ExpiryPort,
+    version = owner.v,
+  ) => {
+    let failure: CapturedFailure | undefined;
+    let generation = owner.n;
+    while (
+      signalOwner &&
+      (signalOwner.n > generation ||
+        (signalOwner.n === generation && signalOwner.v > version))
+    ) {
+      const current = signalOwner;
+      if (current.d) return;
+      const observedGeneration = current.n;
+      const observedVersion = current.v;
+      const observedEffect = current.e;
+      const repairs =
+        port === "broadcast" &&
+        (grantAuthority(owner) || grantAuthority(current))
+          ? (["broadcast", "reconcile"] as const)
+          : ([port] as const);
+      for (const repair of repairs) {
+        try {
+          await captured[repair](observedEffect);
+          if (current.f) current.f[repair] = undefined;
+        } catch (error) {
+          current.f ??= {};
+          current.f[repair] = true;
+          current.h = captured;
+          failure ??= { error };
+        }
+      }
+      generation = observedGeneration;
+      version = observedVersion;
+    }
+    if (failure) throw failure.error as Error;
+  };
+  const retrySignalFailures = () => {
+    if (retryingSignals) return Promise.resolve();
+    if (signalRetry) return signalRetry;
+    const owner = signalOwner;
+    const captured = owner?.h;
+    if (!owner?.f || !captured) return Promise.resolve();
+    const completion = queue(1, async () => {
+      retryingSignals = true;
+      let failure: CapturedFailure | undefined;
+      try {
+        for (const port of ["broadcast", "reconcile"] as const) {
+          if (!owner.f?.[port]) continue;
+          try {
+            await ownedPort(owner, captured, port, owner.e);
+            owner.f[port] = undefined;
+          } catch (error) {
+            failure ??= { error };
+          }
+        }
+        if (owner.f && !owner.f.broadcast && !owner.f.reconcile) {
+          delete owner.h;
+        }
+        if (failure) throw failure.error as Error;
+      } finally {
+        retryingSignals = false;
+      }
+    });
+    signalRetry = completion;
+    const clear = () => {
+      if (signalRetry === completion) signalRetry = undefined;
+    };
+    void completion.then(clear, clear);
+    return completion;
+  };
+  const portOrigin = (
+    attempt: Attempt,
+    port: "aftercare" | ExpiryPort,
+  ) => {
+    const claimed = attempt.F === undefined;
+    if (claimed) attempt.F = port;
+    return () => {
+      if (claimed && attempt.F === port) attempt.F = undefined;
+    };
+  };
+  const ownedPort = async (
+    owner: SignalOwner,
+    captured: CapturedConsentRuntimeKernelPorts,
+    port: ExpiryPort,
+    transitionEffect: ConsentRuntimeTransitionEffect,
+    attempt?: Attempt,
+  ) => {
+    const closeOrigin = attempt ? portOrigin(attempt, port) : undefined;
+    let failure: CapturedFailure | undefined;
+    try {
+      if (signalOwner === owner) delete owner.d;
+      const version = owner.v;
+      const signaled = canSignal(owner, transitionEffect);
+      if (signaled) {
+        try {
+          if (attempt) {
+            const callback: (
+              effect: ConsentRuntimeTransitionEffect,
+              context?: OpenCookiePortContext,
+            ) => Promise<void> = captured[port];
+            let completion: Promise<void>;
+            const previousInvoking = invoking;
+            const previousInvokingPort = invokingPort;
+            invoking = attempt;
+            invokingPort = port;
+            try {
+              completion = callback(transitionEffect, portContext(attempt));
+            } finally {
+              if (invoking === attempt && invokingPort === port) {
+                invoking = previousInvoking;
+                invokingPort = previousInvokingPort;
+              }
+            }
+            await completion;
+          } else {
+            await captured[port](transitionEffect);
+          }
+        } catch (error) {
+          failure = { error };
+        }
+      }
+      if (
+        signaled &&
+        (!isTerminalTask(owner) ||
+          grantsAccess(owner.e) ||
+          grantAuthority(signalOwner))
+      ) {
+        try {
+          await repairPort(owner, captured, port, version);
+        } catch (error) {
+          failure ??= { error };
+        }
+      } else if (signalOwner?.f?.[port]) {
+        try {
+          await repairPort(owner, captured, port, version);
+        } catch (error) {
+          failure ??= { error };
+        }
+      }
+      if (failure) throw failure.error as Error;
+    } finally {
+      closeOrigin?.();
+    }
+  };
+  const decision = (
+    at: number,
+    method: "accept-all" | "granular" | "reject-all",
+    recordId: string,
+    granted: readonly string[],
+  ) =>
+    ({
+      ...(options.consentId === undefined ? {} : { consentId: options.consentId }),
+      decidedAt: at,
+      expiresAt: checked(at + options.consentDurationMs, "Consent expiry"),
+      ...(method === "granular" ? { grantedPurposeIds: granted } : {}),
+      ...(options.locale === undefined ? {} : { locale: options.locale }),
+      method,
+      recordId,
+    }) as RecordDecisionCommand;
+  const prepare = (
+    current: ConsentRecord | undefined,
+    command: RecordDecisionCommand,
+    at: number,
+    transitionId: string,
+  ): Prepared => {
+    const result = recordConsentDecision(current, projectConsentPolicy(context.policySnapshot), command);
+    if (!result.ok) return { i: result.issues, k: "bad" };
+    if (result.outcome === "unchanged") return { k: "same" };
+    const candidate = toPersistedDecisionRecord(result.record);
+    const record = toConsentRecord(candidate);
+    const runtime = projectRuntimeFor(context, record, at);
+    const prepared = Object.freeze({
+      events: createConsentEventBatch({
+        committed: true,
+        previousRecord: result.previousRecord,
+        record,
+      }),
+      record,
+      runtime,
+    });
+    if (Object.values(candidate.decisions).every((value) => value === "denied")) {
+      return { c: candidate, e: effect(prepared, "confirmed", transitionId), k: "terminal" };
+    }
+    return {
+      b: projectRuntimeFor(context, undefined, at),
+      c: candidate,
+      d: context,
+      e: effect(Object.freeze({ events: EMPTY, record, runtime }), "pending", transitionId),
+      k: "grant",
+    };
+  };
+  const install = (
+    attempt: Attempt,
+    state: PersistedConsentState | null | undefined,
+  ) => {
+    const replaced = pending;
+    attempts.add(attempt);
+    if (attempt.x) return;
+    if (staging === attempt) staging = undefined;
+    attempt.C = undefined;
+    if (!attempt.A) {
+      attempt.A = claimSignal(attempt.b);
+      attempt.A.d = true;
+      attempt.A.g = true;
+    }
+    pending = attempt;
+    if (
+      replaced &&
+      replaced !== attempt &&
+      !replaced.q &&
+      running !== replaced
+    ) {
+      attempts.delete(replaced);
+    }
+    if (state !== undefined) currentState = state;
+    if (!terminalPending || attempt.A.n > terminalPending.n) {
+      terminalPending = undefined;
+    }
+    expiry = undefined;
+    expiryPreparing = false;
+    snapshot = makeSnapshot(
+      "ready",
+      attempt.b.runtime,
+      "pending",
+      EMPTY,
+      attempt.z
+        ? true
+        : attempt.k === "restore"
+          ? false
+          : prompt(attempt.b.runtime),
+    );
+    publish();
+  };
+  const pendingResult = (
+    attempt: Attempt,
+    outcome: "invalidated" | "pending" = "pending",
+    diagnostics = attempt.z,
+  ): ConsentRuntimeDecisionResult => {
+    const transition: PendingGrantRuntimeTransition = Object.freeze({
+      persistenceStatus: "pending",
+      record: toConsentRecord(attempt.c),
+      transitionId: attempt.t,
+    });
+    if (outcome === "invalidated") {
+      return Object.freeze({
+        diagnostics: Object.freeze([
+          ...(diagnostics ?? [
+            { code: "grant-activation-conflict" as const },
+            { code: "grant-superseded" as const },
+          ]),
+        ]),
+        effect: attempt.b,
+        outcome,
+        transition,
+      });
+    }
+    return diagnostics
+      ? Object.freeze({
+          diagnostics: Object.freeze([...diagnostics]),
+          effect: attempt.b,
+          outcome,
+          transition,
+        })
+      : Object.freeze({ effect: attempt.b, outcome, transition });
+  };
+  const blockAttempt = (attempt: Attempt) => {
+    const record = toConsentRecord(
+      projectConservativePersistenceFailure(null, attempt.c).effectiveRecord,
+    );
+    attempt.b = effect(
+      Object.freeze({
+        events: EMPTY,
+        record,
+        runtime: projectRuntimeFor(attempt.d, undefined, attempt.h),
+      }),
+      "pending",
+      attempt.t,
+    );
+    if (pending === attempt) {
+      snapshot = Object.freeze({ ...snapshot, runtime: attempt.b.runtime });
+    }
+  };
+  const settleCurrentState = (
+    attempt: Attempt,
+    state: PersistedConsentState | null,
+    adopt = false,
+  ) =>
+    queue(0, () => {
+      if (pending === attempt) {
+        currentState = state;
+        if (adopt) {
+          currentRecord = state?.record
+            ? toConsentRecord(state.record)
+            : undefined;
+          highWater = Math.max(highWater, stateTime(state));
+        }
+      }
+    });
+  const rollbackActivation = async (attempt: Attempt) => {
+    const lineage = attempt.l;
+    const activationStates = frontier([attempt.a, attempt.s]);
+    const restaging = (missing = false) => {
+      if (missing) attempt.l = Object.freeze([null]);
+      attempt.z ??= EMPTY;
+      if (pending === attempt && snapshot.pendingGrant) {
+        snapshot = Object.freeze({
+          ...snapshot,
+          pendingGrant: Object.freeze({
+            ...snapshot.pendingGrant,
+            phase: "persistence",
+          }),
+        });
+        publish();
+      }
+    };
+    const restored = await restage(attempt.p.store, [attempt.a], attempt.s);
+    if (
+      restored.f === undefined ||
+      ("p" in restored &&
+        same(restored.p, attempt.s))
+    ) {
+      attempt.l = Object.freeze([attempt.s]);
+      await settleCurrentState(attempt, attempt.s);
+      return;
+    }
+    attempt.l = activationStates;
+    const effective = effectivePersistedRecord(
+      attempt.b.record,
+      attempt.b.runtime,
+    );
+    try {
+      const observed = await attempt.p.store.read();
+      if (observed.status === "missing") {
+        restaging(true);
+        await settleCurrentState(attempt, null);
+        return;
+      }
+      if (observed.status === "stored") {
+        const captured = snapshotPersistedConsentState(observed.state);
+        if (captured.ok) {
+          if (same(captured.state, attempt.s)) {
+            attempt.l = Object.freeze([attempt.s]);
+            await settleCurrentState(attempt, attempt.s);
+            return;
+          }
+          const known = unique([attempt.a, attempt.s, ...lineage]).find((state) =>
+            same(state, captured.state),
+          );
+          if (
+            known === undefined ||
+            (!same(known, attempt.a) &&
+              !mustClearFailedStageExpected(known, effective))
+          ) {
+            restaging();
+            attempt.l = EMPTY;
+            await settleCurrentState(attempt, captured.state, true);
+            return;
+          }
+          attempt.l = Object.freeze([known]);
+        }
+      }
+    } catch {
+      // Exact conditional cleanup below is the remaining fail-closed path.
+    }
+    const [cleared, remaining, diagnostic] = await clearFailedStage(
+      attempt.p.store,
+      attempt.l,
+      attempt.a,
+      effective,
+    );
+    if (cleared) {
+      attempt.l = Object.freeze([null]);
+      await settleCurrentState(attempt, null);
+    } else {
+      attempt.l = remaining;
+    }
+    attempt.z = Object.freeze([
+      ...(attempt.z ?? EMPTY),
+      ...(diagnostic ? [diagnostic] : []),
+    ]);
+    restaging();
+  };
+  const failedStage = (
+    attempt: Attempt,
+    failure: ConsentRuntimeDecisionDiagnostic,
+    staged: PersistedConsentState,
+    previous: PersistedDecisionRecord | null,
+    expected: PersistedConsentState | null | undefined,
+    retain = false,
+    unsafe = false,
+  ) => {
+    const conservativePrevious =
+      unsafe ||
+      (expected === undefined && failure.code === "grant-write-conflict")
+        ? null
+        : previous;
+    const projection = projectConservativePersistenceFailure(
+      conservativePrevious,
+      attempt.c,
+    );
+    const safe = toConsentRecord(projection.effectiveRecord);
+    const clearCandidate =
+      expected !== undefined || (retain && attempt.l.length === 0);
+    attempt.l =
+      expected === undefined
+        ? retain
+          ? attempt.l.length
+            ? frontier(attempt.l)
+            : Object.freeze([staged])
+          : EMPTY
+        : frontier([expected, staged]);
+    attempt.z = Object.freeze([failure]);
+    let clockFailure: { readonly error: unknown } | undefined;
+    try {
+      const at = Math.max(now(), attempt.h);
+      attempt.b = effect(
+        Object.freeze({
+          events: EMPTY,
+          record: safe,
+          runtime: projectRuntimeFor(attempt.d, safe, at),
+        }),
+        "pending",
+        attempt.t,
+      );
+    } catch (error) {
+      clockFailure = { error };
+      blockAttempt(attempt);
+    }
+    install(
+      attempt,
+      unsafe || (expected === undefined && !retain) ? null : expected,
+    );
+    const cleanup = async () => {
+      const [cleared, remaining, cleanupDiagnostic] = await clearFailedStage(
+        attempt.p.store,
+        attempt.l,
+        clearCandidate ? staged : undefined,
+        projection.effectiveRecord,
+        () => attempt.x,
+      );
+      if (cleared) {
+        attempt.l = Object.freeze([null]);
+        await settleCurrentState(attempt, null);
+      } else {
+        attempt.l = remaining;
+      }
+      attempt.z = Object.freeze([
+        failure,
+        ...(cleanupDiagnostic ? [cleanupDiagnostic] : []),
+      ]);
+    };
+    return { completion: correction(attempt, clockFailure, cleanup) };
+  };
+  const portContext = (attempt: Attempt): OpenCookiePortContext => {
+    if (attempt.i) return attempt.i;
+    const intent = attempt.B ?? command();
+    const reserve = <Result extends { readonly outcome: string }>(
+      operation: () => Promise<Result>,
+    ) => {
+      if (!attempt.o || attempt.u || attempt.x) {
+        return Promise.reject(new Error("OpenCookie port context is no longer active."));
+      }
+      if (attempt.F !== undefined) intent.h ??= attempt.F;
+      attempt.u = true;
+      let completion: Promise<Result>;
+      try {
+        completion = operation();
+      } catch (error) {
+        completion = Promise.reject(
+          error instanceof Error
+            ? error
+            : new Error("OpenCookie port context operation failed.", {
+                cause: error,
+              }),
+        );
+      }
+      attempt.v = completion.then(
+        ({ outcome }) => outcome === "committed" || outcome === "degraded",
+        () => false,
+      );
+      return completion;
+    };
+    attempt.i = Object.freeze({
+      rejectAll: () => reserve(() => decide("reject-all", EMPTY, attempt, intent)),
+      withdrawConsent: () => reserve(() => withdraw(attempt, intent)),
+    });
+    return attempt.i;
+  };
+  const closeContext = async (attempt: Attempt) => {
+    attempt.o = false;
+    const applied = await attempt.v;
+    if (applied) attempt.x = true;
+    return applied ?? false;
+  };
+  const call = (
+    attempt: Attempt,
+    port: "broadcast" | "reconcile",
+    transitionEffect: ConsentRuntimeTransitionEffect,
+    closeAfterCallback = false,
+  ) => {
+    const closeOrigin = portOrigin(attempt, port);
+    const callback: (
+      value: ConsentRuntimeTransitionEffect,
+      context?: OpenCookiePortContext,
+    ) => Promise<void> = attempt.p[port];
+    const previousInvoking = invoking;
+    const previousInvokingPort = invokingPort;
+    invoking = attempt;
+    invokingPort = port;
+    try {
+      const owner = attempt.A ?? claimSignal(transitionEffect);
+      attempt.A = owner;
+      if (signalOwner === owner) {
+        delete owner.d;
+        updateSignal(owner, transitionEffect);
+      }
+      const version = owner.v;
+      const signaled = canSignal(owner, transitionEffect);
+      const completion = signaled
+        ? callback(transitionEffect, portContext(attempt))
+        : Promise.resolve();
+      const repair = async () => {
+        if (!signaled) return;
+        if (attempt.v && (await attempt.v)) return;
+        if (signalOwner && "i" in signalOwner) return;
+        await repairPort(owner, attempt.p, port, version);
+      };
+      return completion.then(
+        () => {
+          if (closeAfterCallback) attempt.o = false;
+          return repair();
+        },
+        async (error: unknown) => {
+          if (closeAfterCallback) attempt.o = false;
+          try {
+            await repair();
+          } catch {
+            // The original callback rejection remains the diagnostic source.
+          }
+          throw error;
+        },
+      ).finally(closeOrigin);
+    } catch (error) {
+      closeOrigin();
+      throw error;
+    } finally {
+      if (invoking === attempt && invokingPort === port) {
+        invoking = previousInvoking;
+        invokingPort = previousInvokingPort;
+      }
+    }
+  };
+  const callClosed = (
+    attempt: Attempt,
+    port: "broadcast" | "reconcile",
+    transitionEffect: ConsentRuntimeTransitionEffect,
+  ) => {
+    const owner = attempt.A ?? claimSignal(transitionEffect);
+    attempt.A = owner;
+    if (signalOwner === owner) {
+      delete owner.d;
+      updateSignal(owner, transitionEffect);
+    }
+    return ownedPort(owner, attempt.p, port, transitionEffect);
+  };
+  async function correct(
+    attempt: Attempt,
+    diagnostics: readonly ConsentRuntimeDecisionDiagnostic[],
+    applyPorts = true,
+    initialFailure?: { readonly error: unknown },
+    settle?: () => Promise<void>,
+  ) {
+    let failure = initialFailure;
+    let settlement: Promise<void> | undefined;
+    const startSettlement = () => {
+      if (!settlement && settle) {
+        settlement = settle();
+        attempt._ = settlement;
+        const active = settlement;
+        const clear = () => {
+          if (attempt._ === active) attempt._ = undefined;
+        };
+        void active.then(clear, clear);
+      }
+      return settlement;
+    };
+    let expired =
+      attempt.b.runtime.policyReconciliation?.status === "expired";
+    const publishRuntime = () =>
+      queue(0, () => {
+        if (pending === attempt) {
+          snapshot = Object.freeze({
+            ...snapshot,
+            runtime: attempt.b.runtime,
+          });
+          publish();
+        }
+      });
+    const refresh = () => {
+      if (failure) return;
+      try {
+        const at = Math.max(now(), attempt.h);
+        const next = at >= attempt.b.record.expiresAt;
+        const crossed = !expired && next;
+        expired = next;
+        if (!crossed) return;
+        reproject(attempt, at);
+      } catch (error) {
+        failure = { error };
+        expired = true;
+        blockAttempt(attempt);
+      }
+      return publishRuntime();
+    };
+    let publication = failure ? publishRuntime() : refresh();
+    if (publication) await publication;
+    let applied = attempt.v ? await closeContext(attempt) : false;
+    const corrective: ConsentRuntimeDecisionDiagnostic[] = [];
+    if (!applied && applyPorts) {
+      const ports = ["broadcast", "reconcile"] as const;
+      let index = 0;
+      while (index < ports.length) {
+        publication = refresh();
+        if (publication) {
+          index = 0;
+          await publication;
+        }
+        const retains = grantsAccess(attempt.b);
+        if (attempt.x && retains) break;
+        const superseded = attempt.x;
+        const port = ports[index++] as (typeof ports)[number];
+        try {
+          const completion = call(
+            attempt,
+            port,
+            attempt.b,
+            index === ports.length,
+          );
+          void startSettlement();
+          await completion;
+        } catch {
+          void startSettlement();
+          corrective.push({
+            code:
+              port === "broadcast"
+                ? "grant-corrective-signal-failed"
+                : "grant-corrective-reconcile-failed",
+          });
+        }
+        publication = refresh();
+        if (publication) index = 0;
+        const newlySuperseded = !superseded && attempt.x;
+        const closing =
+          index === ports.length || newlySuperseded || attempt.v
+            ? closeContext(attempt)
+            : undefined;
+        if (publication) await publication;
+        if (closing) {
+          const closed = await closing;
+          applied = closed || applied;
+          if (closed || newlySuperseded) break;
+          publication = refresh();
+          if (publication) {
+            index = 0;
+            await publication;
+          }
+        }
+      }
+      applied = (await closeContext(attempt)) || applied;
+    }
+    const repair = startSettlement();
+    if (repair) await repair;
+    let replay = false;
+    if (pending === attempt && !attempt.x && !applied) {
+      publication = refresh();
+      if (publication) {
+        await publication;
+        replay = true;
+      }
+    }
+    return async () => {
+      if (replay) {
+        for (const port of ["broadcast", "reconcile"] as const) {
+          if (pending !== attempt || attempt.x || applied) break;
+          attempt.j = true;
+          try {
+            await callClosed(attempt, port, attempt.b);
+          } catch {
+            corrective.push({
+              code:
+                port === "broadcast"
+                  ? "grant-corrective-signal-failed"
+                  : "grant-corrective-reconcile-failed",
+            });
+          } finally {
+            attempt.j = false;
+          }
+        }
+      }
+      const reasons = [...diagnostics, ...(attempt.z ?? EMPTY)].filter(
+        (diagnostic, index, all) =>
+          all.findIndex(({ code }) => code === diagnostic.code) === index,
+      );
+      const superseded = attempt.x || applied;
+      const all: readonly ConsentRuntimeDecisionDiagnostic[] = [
+        ...(superseded
+          ? ([
+              { code: "grant-activation-conflict" },
+              { code: "grant-superseded" },
+            ] as const)
+          : reasons),
+        ...corrective,
+      ];
+      const invalidated =
+        superseded ||
+        reasons.some(
+          ({ code }) =>
+            code === "grant-expired-before-activation" ||
+            code === "grant-policy-mismatch-before-activation" ||
+            code === "grant-superseded",
+        );
+      if (
+        reasons.some(
+          ({ code }) =>
+            code === "grant-expired-before-activation" ||
+            code === "grant-policy-mismatch-before-activation",
+        )
+      ) {
+        attempt.E = true;
+      }
+      if (failure) throw failure.error;
+      return pendingResult(attempt, invalidated ? "invalidated" : "pending", all);
+    };
+  }
+  const complete = (result: GrantRunResult) =>
+    typeof result === "function" ? result() : Promise.resolve(result);
+  function correction(
+    attempt: Attempt,
+    failure?: { readonly error: unknown },
+    settle?: () => Promise<void>,
+  ) {
+    const phase = queue(1, async () => {
+        attempt.o = true;
+        try {
+          return await correct(
+            attempt,
+            attempt.z ?? EMPTY,
+            true,
+            failure,
+            settle,
+          );
+        } finally {
+          attempt.o = false;
+        }
+      });
+    const completion = track(attempt, phase.then(complete));
+    return publicGrantCompletion(attempt, completion);
+  }
+  const activation = async (
+    attempt: Attempt,
+    atomicBoundary: Promise<void>,
+  ): Promise<GrantActivationResult> => {
+    const unconfirmed = (
+      code: Extract<GrantActivationResult, { readonly code: string }>["code"],
+    ): GrantActivationResult => ({
+      code,
+      settle: () => rollbackActivation(attempt),
+    });
+    let observed;
+    try {
+      observed = await attempt.p.store.read();
+    } catch {
+      return unconfirmed("grant-activation-unconfirmed");
+    }
+    if (observed.status !== "stored") {
+      return unconfirmed("grant-activation-unconfirmed");
+    }
+    const captured = snapshotPersistedConsentState(observed.state);
+    if (!captured.ok) return unconfirmed("grant-activation-unconfirmed");
+    let already = persistedConsentStatesEqual(captured.state, attempt.a);
+    if (!already && !persistedConsentStatesEqual(captured.state, attempt.s)) {
+      return unconfirmed("grant-activation-conflict");
+    }
+    let at: number;
+    let runtime: ConsentRuntimeProjection;
+    try {
+      at = Math.max(now(), attempt.h);
+      runtime = projectRuntimeFor(attempt.d, toConsentRecord(attempt.c), at);
+    } catch (error) {
+      blockAttempt(attempt);
+      return already
+        ? { error, settle: () => rollbackActivation(attempt) }
+        : { error };
+    }
+    if (at >= attempt.c.expiresAt) {
+      blockAttempt(attempt);
+      return already
+        ? unconfirmed("grant-expired-before-activation")
+        : { code: "grant-expired-before-activation" as const };
+    }
+    const status = runtime.policyReconciliation?.status;
+    if (
+      (status !== "current" && status !== "requires-reconsent") ||
+      !runtime.accessConsent.decisions.some(
+        ({ decision }) => decision === "granted",
+      )
+    ) {
+      return already
+        ? unconfirmed("grant-policy-mismatch-before-activation")
+        : { code: "grant-policy-mismatch-before-activation" as const };
+    }
+    if (!already) {
+      try {
+        const written = await (async () => {
+          attempt.G = atomicBoundary;
+          try {
+            return await attempt.p.store.compareAndSet(attempt.s, attempt.a);
+          } finally {
+            if (attempt.G === atomicBoundary) attempt.G = undefined;
+          }
+        })();
+        if (written.status === "conflict") {
+          const raced = await attempt.p.store.read();
+          if (raced.status === "missing") {
+            return unconfirmed("grant-activation-conflict");
+          }
+          if (raced.status !== "stored") {
+            return unconfirmed("grant-activation-conflict");
+          }
+          const captured = snapshotPersistedConsentState(raced.state);
+          if (!captured.ok) {
+            return unconfirmed("grant-activation-conflict");
+          }
+          if (!persistedConsentStatesEqual(captured.state, attempt.a)) {
+            return unconfirmed("grant-activation-conflict");
+          }
+          already = true;
+        } else if (written.status !== "written") {
+          return unconfirmed("grant-activation-unconfirmed");
+        }
+        if (!already) {
+          const readback = await attempt.p.store.read();
+          if (
+            readback.status !== "stored" ||
+            !persistedConsentStatesEqual(frozenState(readback.state), attempt.a)
+          ) {
+            return unconfirmed("grant-activation-unconfirmed");
+          }
+        }
+      } catch {
+        return unconfirmed("grant-activation-unconfirmed");
+      }
+    }
+    try {
+      at = Math.max(now(), attempt.h);
+    } catch (error) {
+      blockAttempt(attempt);
+      return { error, settle: () => rollbackActivation(attempt) };
+    }
+    if (at >= attempt.c.expiresAt) {
+      blockAttempt(attempt);
+      return unconfirmed("grant-expired-before-activation");
+    }
+    runtime = projectRuntimeFor(attempt.d, toConsentRecord(attempt.c), at);
+    return {
+      effect: Object.freeze({ ...attempt.f, runtime }),
+      state: attempt.a,
+    };
+  };
+  const runGrant = async (attempt: Attempt): Promise<GrantRunResult> => {
+    running = attempt;
+    attempt.o = true;
+    const diagnostics: ConsentRuntimeDecisionDiagnostic[] = [];
+    let active: { effect: ConsentRuntimeTransitionEffect; state: PersistedConsentState } | undefined;
+    try {
+      for (const step of STEPS.grant) {
+        const applied = attempt.v ? await closeContext(attempt) : false;
+        if (attempt.x || applied) {
+          return await correct(attempt, [
+            { code: "grant-activation-conflict" },
+            { code: "grant-superseded" },
+          ], !attempt.w);
+        }
+        if (step === "broadcast") {
+          let at: number;
+          try {
+            at = reproject(attempt);
+          } catch (error) {
+            blockAttempt(attempt);
+            return await correct(
+              attempt,
+              attempt.z ?? EMPTY,
+              true,
+              { error },
+            );
+          }
+          if (at >= attempt.c.expiresAt) {
+            return await correct(attempt, [
+              { code: "grant-expired-before-activation" },
+            ]);
+          }
+          try {
+            await call(attempt, step, attempt.e);
+          } catch {
+            return await correct(attempt, [
+              { code: "grant-signal-broadcast-failed" },
+            ]);
+          }
+        } else if (step === "activate") {
+          // eslint-disable-next-line prefer-const -- the queued closure observes this after assignment
+          let boundary!: Promise<void>;
+          const phase = queue(0, async () => {
+            const activated = await activation(attempt, boundary);
+            if (
+              !("code" in activated) &&
+              !("error" in activated) &&
+              !attempt.H &&
+              (attempt.x || (attempt.B && !ownsCommand(attempt.B)))
+            ) {
+              return {
+                code: "grant-activation-conflict" as const,
+                settle: () => rollbackActivation(attempt),
+              };
+            }
+            if (!("code" in activated) && !("error" in activated)) {
+              attempt.y = 1;
+              currentState = activated.state;
+              currentRecord = activated.effect.record;
+              if (pending === attempt) pending = undefined;
+              expiry = undefined;
+              expiryPreparing = false;
+              snapshot = makeSnapshot(
+                "ready",
+                activated.effect.runtime,
+                "confirmed",
+                EMPTY,
+                prompt(activated.effect.runtime) ||
+                  (attempt.k === "restore" && snapshot.preferencesOpen),
+              );
+            }
+            return activated;
+          });
+          boundary = phase.then(
+            () => undefined,
+            () => undefined,
+          );
+          let result: GrantActivationResult;
+          try {
+            result = await phase;
+          } finally {
+            if (attempt.G === boundary) attempt.G = undefined;
+            attempt.H = false;
+          }
+          if ("error" in result) {
+            return await correct(
+              attempt,
+              attempt.z ?? EMPTY,
+              true,
+              { error: result.error },
+              result.settle,
+            );
+          }
+          if ("code" in result) {
+            if (
+              attempt.k === "restore" &&
+              result.code === "grant-policy-mismatch-before-activation"
+            ) {
+              await queue(0, () => {
+                currentRecord = attempt.e.record;
+                snapshot = makeSnapshot(
+                  "ready",
+                  attempt.e.runtime,
+                  "pending",
+                );
+                publish();
+              });
+            }
+            return await correct(
+              attempt,
+              result.code === "grant-activation-conflict"
+                ? [
+                    { code: result.code },
+                    { code: "grant-superseded" },
+                  ]
+                : [{ code: result.code }],
+              true,
+              undefined,
+              result.settle,
+            );
+          }
+          active = { effect: result.effect, state: result.state };
+        } else if (step === "reconcile") {
+          if (!active) {
+            throw new TypeError("Grant reconciliation has no active effect.");
+          }
+          try {
+            await call(
+              attempt,
+              step,
+              active.effect,
+              attempt.k === "restore",
+            );
+          } catch {
+            diagnostics.push({ code: "grant-reconcile-failed" });
+          }
+          if (attempt.k === "restore") await closeContext(attempt);
+          await queue(0, () => undefined);
+        } else if (step === "aftercare" && attempt.r !== undefined) {
+          const closeOrigin = portOrigin(attempt, "aftercare");
+          try {
+            const aftercare: ConsentRuntimeAftercareHook = attempt.p.aftercare;
+            let completion: Promise<void>;
+            const previousInvoking = invoking;
+            const previousInvokingPort = invokingPort;
+            invoking = attempt;
+            invokingPort = "aftercare";
+            try {
+              completion = aftercare(
+                Object.freeze({
+                  occurredAt: attempt.r,
+                  persistenceStatus: "confirmed",
+                  record: attempt.c,
+                  transitionId: attempt.t,
+                }),
+                portContext(attempt),
+              );
+            } finally {
+              if (invoking === attempt) {
+                invoking = previousInvoking;
+                invokingPort = previousInvokingPort;
+              }
+            }
+            await completion;
+          } catch {
+            diagnostics.push({ code: "grant-receipt-failed" });
+          } finally {
+            closeOrigin();
+          }
+          await closeContext(attempt);
+        } else if (step === "publish") {
+          await closeContext(attempt);
+          await queue(0, publish);
+        }
+      }
+      if (!active) {
+        throw new TypeError("Grant transition has no active effect.");
+      }
+      const transition = Object.freeze({
+        persistenceStatus: "confirmed" as const,
+        record: attempt.c,
+        transitionId: attempt.t,
+      });
+      return diagnostics.length
+        ? Object.freeze({
+            diagnostics: Object.freeze(diagnostics),
+            effect: active.effect,
+            outcome: "degraded" as const,
+            transition,
+          })
+        : Object.freeze({
+            effect: active.effect,
+            outcome: "committed" as const,
+            transition,
+          });
+    } finally {
+      attempt.o = false;
+      if (running === attempt) running = undefined;
+      if (pending === attempt && attempt.x) pending = undefined;
+      if (pending !== attempt) attempts.delete(attempt);
+    }
+  };
+  const track = (
+    attempt: Attempt,
+    completion: Promise<ConsentRuntimeDecisionResult>,
+  ) => {
+    attempt.q = completion;
+    const clear = () => {
+      if (attempt.q === completion) attempt.q = undefined;
+      if (reserved === attempt && !attempt.q) reserved = undefined;
+      if (pending !== attempt && running !== attempt) attempts.delete(attempt);
+    };
+    void completion.then(clear, clear);
+    return completion;
+  };
+  const schedule = (attempt: Attempt) => {
+    if (attempt.q) return attempt.q;
+    const phase = queue(1, () => runGrant(attempt));
+    return track(attempt, phase.then(complete));
+  };
+  const liveAttempts = () =>
+    [...attempts].filter(
+      (attempt) =>
+        attempt === pending ||
+        attempt === staging ||
+        attempt === running ||
+        attempt.D !== undefined ||
+        attempt.q !== undefined,
+    );
+  const settlementBarrier = () => {
+    const settlements = liveAttempts().flatMap((attempt) =>
+      attempt._ ? [attempt._] : [],
+    );
+    return settlements.length
+      ? Promise.all(
+          settlements.map((settlement) => settlement.catch(() => undefined)),
+        )
+      : undefined;
+  };
+  const preactivation = () =>
+    staging ??
+    pending ??
+    reserved ??
+    (running?.y === 0
+      ? running
+      : liveAttempts().find((attempt) => attempt.y === 0));
+  const physical = (attempt: Attempt | undefined) =>
+    attempt
+      ? attempt === staging || attempt.C !== undefined || attempt.D !== undefined
+        ? attempt.C === undefined
+          ? frontier([attempt.s, currentState, ...attempt.l])
+          : frontier([attempt.s, attempt.C])
+        : frontier([
+            currentState,
+            ...(attempt.z === undefined
+              ? [attempt.s, attempt.a, ...attempt.l]
+              : attempt.l),
+          ])
+      : Object.freeze([currentState]);
+  const command = (): CommandIntent => ({ n: (commandGeneration += 1) });
+  const ownsCommand = (intent: CommandIntent) =>
+    intent.a === true && authorityOrder === intent.n;
+  const commandEligible = (intent: CommandIntent) =>
+    intent.n >= authorityOrder;
+  const retired = (intent: CommandIntent, state: PersistedConsentState) => {
+    let prior = intent.z;
+    while (prior) {
+      if (prior.k?.some((candidate) => same(candidate, state))) return true;
+      prior = prior.z;
+    }
+    return false;
+  };
+  const activateCommand = (intent: CommandIntent) => {
+    if (intent.a) return ownsCommand(intent);
+    if (!commandEligible(intent)) return false;
+    intent.y = authorityOrder;
+    if (authorityIntent) intent.z = authorityIntent;
+    intent.a = true;
+    authorityOrder = intent.n;
+    authorityIntent = intent;
+    return true;
+  };
+  const terminalCompletion = (intent: CommandIntent) => {
+    if (!intent.c) {
+      intent.c = new Promise<void>((resolve) => {
+        intent.u = resolve;
+      });
+    }
+    return intent.c;
+  };
+  const completeTerminalIntent = (intent: CommandIntent) => {
+    intent.u?.();
+    delete intent.u;
+  };
+  const terminalHandoff = (intent: CommandIntent) => {
+    if (!intent.e) {
+      intent.e = new Promise<void>((resolve) => {
+        intent.f = resolve;
+      });
+    }
+    return intent.e;
+  };
+  const takeTerminalHandoff = (intent: CommandIntent) => {
+    const predecessor = intent.w;
+    delete intent.w;
+    return predecessor;
+  };
+  const releaseInitializingTerminal = (intent: CommandIntent) => {
+    if (initializingTerminal === intent) initializingTerminal = undefined;
+    intent.f?.();
+    delete intent.f;
+  };
+  const reserveTerminal = (intent: CommandIntent) => {
+    intent.d = true;
+    if (intent.b) return ownsCommand(intent);
+    if (terminalPending && !intent.a) return commandEligible(intent);
+    if (
+      initializingTerminal &&
+      initializingTerminal !== intent &&
+      !intent.a
+    ) {
+      intent.w ??= terminalHandoff(initializingTerminal);
+      return commandEligible(intent);
+    }
+    if (!intent.a && !activateCommand(intent)) return false;
+    if (!ownsCommand(intent)) return false;
+    void terminalCompletion(intent);
+    void terminalHandoff(intent);
+    initializingTerminal ??= intent;
+    if (
+      snapshot.pendingGrant ||
+      snapshot.lastPersistenceStatus === "failed" ||
+      snapshot.lastPersistenceStatus === "failed-conservative"
+    ) {
+      intent.r = true;
+    }
+    const active = preactivation();
+    if (active) {
+      intent.p = active;
+      intent.g ??= active.b;
+      intent.o ??= active.x;
+      intent.x ??= active.w;
+      if (!("v" in intent)) intent.v = currentState;
+    }
+    if (active) reserved = active;
+    const tracked = liveAttempts().filter((attempt) => attempt.y === 0);
+    if (active && !tracked.includes(active)) tracked.push(active);
+    for (const attempt of tracked) {
+      if (attempt.G) {
+        intent.q ??= attempt.G;
+        attempt.H = true;
+        continue;
+      }
+      attempt.x = true;
+      if (activeExpiry && running !== attempt) attempt.w = true;
+    }
+    const previouslyAllowed = snapshot.runtime.accessConsent.decisions.some(
+      ({ decision }) => decision === "granted",
+    );
+    const immediateBlock =
+      previouslyAllowed &&
+      (active === staging ||
+        active?.C !== undefined ||
+        active?.D !== undefined);
+    const shouldBlock =
+      immediateBlock ||
+      (intent.r === true && active !== undefined && grantsAccess(active.e));
+    pending = undefined;
+    staging = undefined;
+    expiry = undefined;
+    expiryPreparing = false;
+    if (!active) {
+      if (initialized) intent.b = true;
+      return ownsCommand(intent);
+    }
+    intent.b = true;
+    if (!shouldBlock) return ownsCommand(intent);
+    blockAttempt(active);
+    const blockedGrant = effect(
+      Object.freeze({
+        events: EMPTY,
+        record: active.z ? active.b.record : active.e.record,
+        runtime: active.b.runtime,
+      }),
+      "pending",
+      active.t,
+    );
+    const owner = claimSignal(blockedGrant);
+    owner.d = true;
+    intent.s = {
+      e: blockedGrant,
+      o: owner,
+      p: active.p,
+      q: Promise.resolve(),
+    };
+    startTerminalReservationSignals(intent);
+    return ownsCommand(intent);
+  };
+  const materializeTerminalReservation = (intent: CommandIntent) => {
+    const reservation = intent.s;
+    if (!reservation || intent.m || !ownsCommand(intent)) return;
+    intent.m = true;
+    snapshot = makeSnapshot(
+      "ready",
+      reservation.e.runtime,
+      "pending",
+      EMPTY,
+      prompt(reservation.e.runtime),
+      currentRecord ?? snapshot.record,
+    );
+    publish();
+  };
+  const startTerminalReservationSignals = (intent: CommandIntent) => {
+    const signals = intent.s;
+    if (!signals || signals.x || !ownsCommand(intent)) return;
+    materializeTerminalReservation(intent);
+    if (!ownsCommand(intent)) return;
+    signals.x = true;
+    signals.q = (async () => {
+      for (const port of ["broadcast", "reconcile"] as const) {
+        if (!ownsCommand(intent)) break;
+        if (intent.h === port) continue;
+        try {
+          await ownedPort(
+            signals.o,
+            signals.p,
+            port,
+            signals.e,
+            intent.p,
+          );
+        } catch (error) {
+          if (port === "broadcast") signals.b = { error };
+          else signals.r = { error };
+        }
+      }
+    })();
+  };
+  const activationHandoff = (intent: CommandIntent) => {
+    const boundary = intent.q;
+    if (!boundary) return undefined;
+    delete intent.q;
+    return boundary.then(() => {
+      const attempt = intent.p;
+      if (attempt?.y !== 1) return;
+      if (reserved === attempt) reserved = undefined;
+      delete intent.p;
+    });
+  };
+  const publicGrantCompletion = (
+    attempt: Attempt,
+    completion: Promise<ConsentRuntimeDecisionResult>,
+  ) => activeExpiry ? Promise.resolve(pendingResult(attempt)) : completion;
+  const persistedBase = async (
+    force: boolean,
+    intent: CommandIntent,
+  ): Promise<PersistedBase> => {
+    const fallbackRecord = currentRecord;
+    const fallbackState = currentState;
+    if (
+      !force &&
+      !snapshot.pendingGrant &&
+      snapshot.lastPersistenceStatus !== "failed" &&
+      snapshot.lastPersistenceStatus !== "failed-conservative"
+    ) {
+      return {
+        adopted: false,
+        record: fallbackRecord,
+        state: fallbackState,
+      };
+    }
+    try {
+      const read = options.store.read();
+      let settled = false;
+      void read.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await Promise.resolve();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the read callback can settle during the yielded microtask
+      if (!settled) {
+        startTerminalReservationSignals(intent);
+        releaseInitializingTerminal(intent);
+      }
+      const result = await initializeConsent({ read: () => read });
+      if (result.status !== "restored" && result.status !== "pending") {
+        return { adopted: true, record: fallbackRecord, state: null };
+      }
+      if (
+        intent.d === true &&
+        !same(result.state, fallbackState) &&
+        retired(intent, result.state)
+      ) {
+        if (!intent.j?.some((state) => same(state, result.state))) {
+          intent.j = Object.freeze([...(intent.j ?? EMPTY), result.state]);
+        }
+        return {
+          adopted: false,
+          record: fallbackRecord,
+          state: fallbackState,
+        };
+      }
+      const record = result.state.record
+        ? toConsentRecord(result.state.record)
+        : undefined;
+      return { adopted: true, record, state: result.state };
+    } catch {
+      return {
+        adopted: false,
+        record: fallbackRecord,
+        state: fallbackState,
+      };
+    }
+  };
+  const adoptPersistedBase = (base: PersistedBase) => {
+    if (base.adopted) {
+      currentState = base.state;
+      currentRecord = base.record;
+      highWater = Math.max(highWater, stateTime(base.state));
+    }
+    return base.record;
+  };
+  const adoptedBarrier = (
+    attempt: Attempt | undefined,
+    known: readonly (PersistedConsentState | null)[],
+  ) => {
+    if (!attempt || known.some((state) => same(state, currentState))) {
+      return undefined;
+    }
+    attempt.x = true;
+    blockAttempt(attempt);
+    publish();
+    return correction(attempt).then(() =>
+      queue(0, () => {
+        if (pending === attempt) pending = undefined;
+        const adoptedState = currentState;
+        const terminalAuthority =
+          authorityIntent?.d === true && ownsCommand(authorityIntent)
+            ? authorityIntent
+            : undefined;
+        if (terminalAuthority) {
+          const conservativeRecord = currentRecord
+            ? toConsentRecord(
+                projectConservativePersistenceFailure(
+                  null,
+                  toPersistedDecisionRecord(currentRecord),
+                ).effectiveRecord,
+              )
+            : undefined;
+          const runtime = runtimeFor(conservativeRecord, highWater);
+          snapshot = makeSnapshot(
+            "ready",
+            runtime,
+            "pending",
+            EMPTY,
+            prompt(runtime),
+            currentRecord,
+          );
+          publish();
+          return;
+        }
+        if (adoptedState?.pendingGrant) {
+          const adopted = resumed(adoptedState, context, highWater);
+          adopted.p = ports();
+          install(adopted, adoptedState);
+          return;
+        }
+        const runtime = runtimeFor(
+          currentRecord,
+          highWater,
+        );
+        snapshot = makeSnapshot(
+          "ready",
+          runtime,
+          "confirmed",
+          EMPTY,
+          prompt(runtime),
+        );
+        publish();
+      }),
+    );
+  };
+  const terminalProgram = (
+    attempt: Attempt | undefined,
+    prepared: Extract<Prepared, { k: "terminal" }>,
+    occurredAt: number | undefined,
+    intent: CommandIntent,
+  ) => {
+    if (!ownsCommand(intent)) {
+      throw new TypeError("Superseded terminal intent cannot start persistence.");
+    }
+    intent.l = true;
+    const directAftercare = activeExpiry !== undefined || attempt?.v !== undefined;
+    const tracked = liveAttempts().filter((active) => active.y === 0);
+    if (intent.p && !tracked.includes(intent.p)) tracked.push(intent.p);
+    if (attempt && !tracked.includes(attempt)) tracked.push(attempt);
+    for (const active of tracked) {
+      active.x = true;
+      if (activeExpiry && running !== active) active.w = true;
+    }
+    const preconditions = tracked.flatMap((active) =>
+      active._ ? [active._] : [],
+    );
+    const captured = ports();
+    const candidate = frozenState({ record: prepared.c });
+    const previousTerminal = terminalPending;
+    const predecessors = frontier([
+      ...(previousTerminal ? [previousTerminal.c] : EMPTY),
+      ...physical(pending ?? attempt ?? intent.p),
+    ]);
+    const retiredStates = Object.freeze(
+      unique([
+        ...tracked.flatMap((active) => [active.s, active.a, ...active.l]),
+        ...predecessors,
+      ]).filter((state): state is PersistedConsentState => state !== null),
+    );
+    const pendingEffect = Object.freeze({
+      ...prepared.e,
+      persistenceStatus: "pending" as const,
+    });
+    let finalSnapshot: OpenCookieSnapshot | undefined;
+    const task: TerminalTask = Object.assign(claimSignal(pendingEffect), {
+      c: candidate,
+      i: intent,
+      p: captured,
+      r: occurredAt,
+      s: undefined,
+    });
+    if (intent.s) task.d = true;
+    terminalPending = task;
+    pending = undefined;
+    expiry = undefined;
+    expiryPreparing = false;
+    snapshot = makeSnapshot(
+      "ready",
+      prepared.e.runtime,
+      "pending",
+      EMPTY,
+      prompt(prepared.e.runtime),
+      prepared.e.record,
+    );
+    publish();
+    const terminalPort = async (
+      port: ExpiryPort,
+      value: ConsentRuntimeTransitionEffect,
+    ) => {
+      const reservedSignals = intent.s;
+      let failure: CapturedFailure | undefined;
+      if (reservedSignals) {
+        await reservedSignals.q;
+        failure = port === "broadcast" ? reservedSignals.b : reservedSignals.r;
+      }
+      if (signalOwner === task) delete task.d;
+      try {
+        await ownedPort(task, captured, port, value);
+      } catch (error) {
+        failure ??= { error };
+      }
+      if (failure) throw failure.error as Error;
+    };
+    return executeDenialTransitionProgram<
+      PersistedConsentState,
+      ConsentRuntimeTransitionEffect,
+      TerminalDecisionResult,
+      SupersedingTerminalProgram
+    >({
+      broadcast: (value) => terminalPort("broadcast", value),
+      candidate,
+      ...(intent.j === undefined ? {} : { cleanupStates: intent.j }),
+      commit: (status) => {
+        if (terminalPending === task) {
+          if (status === "confirmed") intent.k = retiredStates;
+          currentState = status === "confirmed" ? candidate : null;
+          currentRecord = prepared.e.record;
+          finalSnapshot = makeSnapshot(
+            "ready",
+            prepared.e.runtime,
+            status,
+            EMPTY,
+            status === "failed" ? true : prompt(prepared.e.runtime),
+            prepared.e.record,
+          );
+          for (const active of tracked) {
+            if (!active.q && running !== active) attempts.delete(active);
+          }
+        }
+      },
+      completions: EMPTY,
+      equals: persistedConsentStatesEqual,
+      finalize: (status, diagnostics) => {
+        const finalEffect = Object.freeze({
+          ...prepared.e,
+          persistenceStatus: status,
+        });
+        const transition = Object.freeze({
+          persistenceStatus: status,
+          record: prepared.c,
+          transitionId: prepared.e.transitionId,
+        });
+        return diagnostics.length
+          ? Object.freeze({
+              diagnostics,
+              effect: finalEffect,
+              outcome: "degraded" as const,
+              transition,
+            })
+          : Object.freeze({
+              effect: finalEffect,
+              outcome: "committed" as const,
+              transition,
+            });
+      },
+      kind: "superseding",
+      pending: pendingEffect,
+      preconditions,
+      predecessors,
+      publish: () => {
+        if (
+          terminalPending !== task ||
+          !ownsCommand(task.i) ||
+          finalSnapshot === undefined
+        ) {
+          return;
+        }
+        snapshot = finalSnapshot;
+        publish();
+      },
+      ...(occurredAt === undefined
+        ? {}
+        : {
+            receipt: (status: "confirmed" | "failed") =>
+              captured.aftercare(
+                Object.freeze({
+                  occurredAt,
+                  persistenceStatus: status,
+                  record: prepared.c,
+                  transitionId: prepared.e.transitionId,
+                }),
+              ),
+          }),
+      reconcile: (value) => terminalPort("reconcile", value),
+      schedule: (operation) =>
+        directAftercare || !intent.d
+          ? Promise.resolve().then(operation)
+          : queueTerminalAftercare(operation),
+      schedulePersistence: (operation) => {
+        const completion = terminalStoreTail.then(operation);
+        task.s = completion;
+        terminalStoreTail = completion.then(
+          () => undefined,
+          () => undefined,
+        );
+        const clear = () => {
+          if (task.s === completion) task.s = undefined;
+        };
+        void completion.then(clear, clear);
+        return completion;
+      },
+      store: captured.store,
+    }).then((plan) => {
+      releaseInitializingTerminal(intent);
+      const clear = () => {
+        if (terminalPending === task) terminalPending = undefined;
+      };
+      void plan.completion.then(clear, clear);
+      return plan;
+    });
+  };
+
+  function initialize(): Promise<OpenCookieSnapshot> {
+    initialization ??= (async () => {
+      const completion = await queue<
+        Readonly<{ completion?: Promise<ConsentRuntimeDecisionResult> }>
+      >(0, async () => {
+        const result = await initializeConsent(options.store);
+        currentState =
+          result.status === "restored" || result.status === "pending" ? result.state : null;
+        currentRecord =
+          (result.status === "restored" || result.status === "pending") &&
+          result.state.record
+            ? toConsentRecord(result.state.record)
+            : undefined;
+        if (currentState) {
+          highWater = Math.max(highWater, stateTime(currentState));
+        }
+        const terminalAuthority =
+          initializingTerminal?.d === true && ownsCommand(initializingTerminal)
+            ? initializingTerminal
+            : undefined;
+        if (terminalAuthority) {
+          if (result.status === "invalid") {
+            const runtime = runtimeFor(undefined, highWater);
+            snapshot = makeSnapshot(
+              "invalid",
+              runtime,
+              undefined,
+              result.diagnostics,
+            );
+            publish();
+            return Object.freeze({});
+          }
+          if (currentState?.pendingGrant && !terminalAuthority.p) {
+            const attempt = resumed(currentState, context, highWater);
+            attempt.p = ports();
+            terminalAuthority.p = attempt;
+            terminalAuthority.g = attempt.b;
+            terminalAuthority.o = attempt.x;
+            terminalAuthority.r = true;
+            terminalAuthority.v = currentState;
+            terminalAuthority.x = attempt.w;
+            reserved = attempt;
+          }
+          const runtime = runtimeFor(undefined, highWater);
+          snapshot = makeSnapshot(
+            "ready",
+            runtime,
+            undefined,
+            EMPTY,
+            prompt(runtime),
+            currentRecord,
+          );
+          publish();
+          return Object.freeze({});
+        }
+        if (
+          (result.status === "restored" || result.status === "pending") &&
+          result.state.pendingGrant
+        ) {
+          const attempt = resumed(result.state, context, now());
+          attempt.p = ports();
+          install(attempt, result.state);
+          return Object.freeze({ completion: schedule(attempt) });
+        }
+        if (result.status === "restored") {
+          const at = now();
+          const runtime = runtimeFor(currentRecord, at);
+          const hasGrant =
+            result.record.method !== "withdrawal" &&
+            (runtime.policyReconciliation?.status === "current" ||
+              runtime.policyReconciliation?.status === "requires-reconsent") &&
+            runtime.accessConsent.decisions.some(
+              ({ decision }) => decision === "granted",
+            );
+          if (hasGrant) {
+            const transitionId = identifier(options.idGenerator("transition"), "transition");
+            const staged = frozenState({
+              pendingGrant: { kind: "restore", transitionId },
+              record: result.record,
+            });
+            const attempt = resumed(staged, context, at);
+            attempt.p = ports();
+            reserveAttempt(attempt, false);
+            const written = await trackStage(
+              attempt,
+              write(
+                attempt.p.store,
+                [result.state],
+                staged,
+                stageGuard(attempt),
+              ),
+            );
+            if (attempt.x) {
+              return Object.freeze({ completion: correction(attempt) });
+            }
+            const markerlessRestore =
+              written.f !== undefined &&
+              written.f === "grant-readback-mismatch" &&
+              same(written.p, result.state) &&
+              same(written.p, attempt.a);
+            if (markerlessRestore) {
+              attempt.x = true;
+              if (staging === attempt) staging = undefined;
+              attempts.delete(attempt);
+              if (signalOwner === attempt.A) signalOwner = undefined;
+              snapshot = makeSnapshot("ready", runtime);
+              publish();
+              return Object.freeze({});
+            }
+            if (written.f !== undefined) {
+              attempt.l =
+                written.p !== undefined
+                  ? frontier([written.p, staged])
+                  : Object.freeze([result.state]);
+              attempt.z = Object.freeze([{ code: written.f }]);
+            }
+            install(attempt, written.f !== undefined ? result.state : staged);
+            return Object.freeze({
+              completion: written.f !== undefined
+                ? Promise.resolve(pendingResult(attempt))
+                : schedule(attempt),
+            });
+          }
+          snapshot = makeSnapshot("ready", runtime);
+          publish();
+        } else {
+          snapshot = makeSnapshot(
+            result.status === "invalid" ? "invalid" : "ready",
+            runtimeFor(undefined, 0),
+            undefined,
+            result.diagnostics,
+          );
+          publish();
+        }
+        return Object.freeze({});
+      });
+      if (completion.completion) {
+        initializationPending = await completion.completion;
+      }
+      initialized = true;
+      return snapshot;
+    })();
+    const active = initialization;
+    active.catch(() => {
+      if (initialization === active) initialization = undefined;
+    });
+    return active;
+  }
+
+  const unchanged = (record: ConsentRecord, at: number) =>
+    Object.freeze({
+      outcome: "unchanged" as const,
+      record,
+      runtime: runtimeFor(record, at),
+    });
+
+  const preparedTerminal = (
+    record: ConsentRecord,
+    at: number,
+    transitionId: string,
+    previousRecord?: ConsentRecord,
+  ): Extract<Prepared, { k: "terminal" }> => ({
+    c: toPersistedDecisionRecord(record),
+    e: effect(
+      Object.freeze({
+        events: previousRecord
+          ? createConsentEventBatch({ committed: true, previousRecord, record })
+          : EMPTY,
+        record,
+        runtime: runtimeFor(record, at),
+      }),
+      "confirmed",
+      transitionId,
+    ),
+    k: "terminal",
+  });
+
+  const supersededDecision = (): ConsentRuntimeDecisionResult => {
+    const record = currentRecord ?? snapshot.record;
+    if (!record) {
+      throw new TypeError("Superseded decision has no authoritative record.");
+    }
+    return unchanged(record, highWater);
+  };
+
+  const supersededGrantIntent = (): ConsentRuntimeDecisionResult =>
+    Object.freeze({
+      diagnostics: Object.freeze([{ code: "grant-superseded" }] as const),
+      outcome: "invalidated" as const,
+      stage: "intent" as const,
+    });
+
+  const preparingTerminalBarrier = (intent: CommandIntent) => {
+    const owner = authorityIntent;
+    return owner !== undefined &&
+      owner !== intent &&
+      owner.d === true &&
+      owner.l !== true
+      ? owner.c
+      : undefined;
+  };
+
+  const restoreCommandAuthority = (intent: CommandIntent) => {
+    authorityOrder = intent.y ?? 0;
+    authorityIntent = intent.z;
+    delete intent.d;
+  };
+
+  const rollbackTerminalReservation = async (intent: CommandIntent) => {
+    const attempt = intent.p;
+    const canRestoreAuthority = () =>
+      intent.l !== true &&
+      ownsCommand(intent);
+    const canRestoreAttempt = () =>
+      attempt !== undefined &&
+      canRestoreAuthority() &&
+      "v" in intent &&
+      same(intent.v ?? null, currentState);
+    if (!canRestoreAuthority()) return;
+    if (!attempt) {
+      restoreCommandAuthority(intent);
+      releaseInitializingTerminal(intent);
+      return;
+    }
+    if (!canRestoreAttempt()) return;
+    await intent.s?.q;
+    if (!canRestoreAttempt()) return;
+    if (intent.g) attempt.b = intent.g;
+    attempt.A = undefined;
+    attempt.B = undefined;
+    attempt.F = undefined;
+    attempt.i = undefined;
+    attempt.u = false;
+    attempt.v = undefined;
+    attempt.x = intent.o ?? false;
+    attempt.w = intent.x ?? false;
+    if (reserved === attempt) reserved = undefined;
+    restoreCommandAuthority(intent);
+    releaseInitializingTerminal(intent);
+    install(attempt, intent.v);
+    const diagnostics: ConsentRuntimeDecisionDiagnostic[] = [];
+    attempt.o = true;
+    try {
+      const replayPorts = ["broadcast", "reconcile"] as const;
+      for (const [index, port] of replayPorts.entries()) {
+        if (pending !== attempt || attempt.x) break;
+        try {
+          await call(
+            attempt,
+            port,
+            attempt.b,
+            index === replayPorts.length - 1,
+          );
+        } catch {
+          diagnostics.push({
+            code:
+              port === "broadcast"
+                ? "grant-corrective-signal-failed"
+                : "grant-corrective-reconcile-failed",
+          });
+        }
+      }
+    } finally {
+      attempt.o = false;
+    }
+    if (diagnostics.length) {
+      attempt.z = Object.freeze([...(attempt.z ?? EMPTY), ...diagnostics]);
+    }
+  };
+
+  const stageDecision = async (
+    attempt: Attempt,
+    predecessors: readonly (PersistedConsentState | null)[],
+    staged: PersistedConsentState,
+    previousEffective: PersistedDecisionRecord | null,
+    publicCompletion: boolean,
+  ): Promise<TerminalPlan<ConsentRuntimeDecisionResult>> => {
+    const written = await trackStage(
+      attempt,
+      write(attempt.p.store, predecessors, staged, stageGuard(attempt)),
+    );
+    if (attempt.x) return { completion: correction(attempt) };
+    if (written.f !== undefined) {
+      return failedStage(
+        attempt,
+        { code: written.f },
+        staged,
+        previousEffective,
+        written.p,
+        false,
+        written.u === true,
+      );
+    }
+    install(attempt, staged);
+    const completion = schedule(attempt);
+    return {
+      completion: publicCompletion
+        ? publicGrantCompletion(attempt, completion)
+        : completion,
+    };
+  };
+
+  function terminalCommand(
+    method: "accept-all" | "granular" | "reject-all",
+    granted: readonly string[],
+    reentrant: Attempt | undefined,
+    intent: CommandIntent,
+  ): Promise<ConsentRuntimeDecisionResult>;
+  function terminalCommand(
+    method: undefined,
+    granted: readonly [],
+    reentrant: Attempt | undefined,
+    intent: CommandIntent,
+  ): Promise<OpenCookieWithdrawalResult>;
+  async function terminalCommand(
+    method: "accept-all" | "granular" | "reject-all" | undefined,
+    granted: readonly string[],
+    reentrant: Attempt | undefined,
+    intent: CommandIntent,
+  ): Promise<ConsentRuntimeDecisionResult | OpenCookieWithdrawalResult> {
+    const decisionCommand = method !== undefined;
+    const terminal =
+      method === undefined ||
+      method === "reject-all" ||
+      (method === "granular" && !granted.length);
+    const superseded = () =>
+      method === undefined
+        ? currentRecord
+          ? unchanged(currentRecord, highWater)
+          : noPending()
+        : terminal
+          ? supersededDecision()
+          : supersededGrantIntent();
+    const repeat = (
+      attempt?: Attempt,
+    ): Promise<ConsentRuntimeDecisionResult | OpenCookieWithdrawalResult> =>
+      method === undefined
+        ? terminalCommand(undefined, EMPTY, attempt, intent)
+        : terminalCommand(method, granted, attempt, intent);
+    const supersession = (): TerminalPlan<
+      ConsentRuntimeDecisionResult | OpenCookieWithdrawalResult
+    > => {
+      const barrier = terminal ? undefined : preparingTerminalBarrier(intent);
+      return barrier
+        ? { completion: barrier.then(() => repeat(reentrant)) }
+        : completed(superseded());
+    };
+    if (terminal) void terminalCompletion(intent);
+    try {
+      if (terminal) {
+        if (!reserveTerminal(intent)) return superseded();
+        const initialHandoff = takeTerminalHandoff(intent);
+        if (initialHandoff) {
+          await initialHandoff;
+          return await repeat(reentrant);
+        }
+      }
+      if (!reentrant) await initialize();
+      const initializationDiagnostic = snapshot.diagnostics[0];
+      if (
+        snapshot.readiness === "invalid" &&
+        (snapshot.diagnostics.length !== 1 ||
+          initializationDiagnostic?.code !== "stored-consent-invalid" ||
+          initializationDiagnostic.reason !== "read-failed")
+      ) {
+        throw new TypeError("Stored consent state is invalid.");
+      }
+      if (terminal) {
+        if (!reserveTerminal(intent)) return superseded();
+        const initializedHandoff = takeTerminalHandoff(intent);
+        if (initializedHandoff) {
+          await initializedHandoff;
+          return await repeat(reentrant);
+        }
+      }
+      const operation = async (): Promise<
+        TerminalPlan<ConsentRuntimeDecisionResult | OpenCookieWithdrawalResult>
+      > => {
+        if (!commandEligible(intent) || (intent.a && !ownsCommand(intent))) {
+          return supersession();
+        }
+        const activation = terminal ? activationHandoff(intent) : undefined;
+        if (activation) {
+          return { completion: activation.then(() => repeat(reentrant)) };
+        }
+        const terminalStorage = terminalPending?.s;
+        if (terminalStorage) {
+          return {
+            completion:
+              decisionCommand && reentrant
+                ? Promise.resolve(pendingResult(reentrant, "invalidated"))
+                : terminalStorage
+                    .catch(() => undefined)
+                    .then(() => repeat(undefined)),
+          };
+        }
+        if (terminal && intent.s && !intent.t) {
+          try {
+            intent.t = identifier(
+              options.idGenerator("transition"),
+              "transition",
+            );
+          } catch (error) {
+            materializeTerminalReservation(intent);
+            throw error;
+          }
+        }
+        const failed =
+          decisionCommand &&
+          (snapshot.lastPersistenceStatus === "failed" ||
+            snapshot.lastPersistenceStatus === "failed-conservative");
+        const conservativeEffective = decisionCommand
+          ? pending
+            ? effectivePersistedRecord(pending.b.record, pending.b.runtime)
+            : failed && snapshot.record
+              ? effectivePersistedRecord(snapshot.record, snapshot.runtime)
+              : null
+          : null;
+        const samePending =
+          decisionCommand &&
+          pending?.m === method &&
+          !pending.E &&
+          pending.g.length === granted.length &&
+          pending.g.every((id) => granted.includes(id));
+        const active = decisionCommand
+          ? undefined
+          : reentrant ?? intent.p ?? preactivation();
+        const observedAttempt = intent.p ?? pending;
+        const known = observedAttempt ? physical(observedAttempt) : EMPTY;
+        const persisted = await persistedBase(intent.r === true, intent);
+        if (!commandEligible(intent) || (intent.a && !ownsCommand(intent))) {
+          return supersession();
+        }
+        const durable = adoptPersistedBase(persisted);
+        const adoption = adoptedBarrier(observedAttempt, known);
+        if (adoption) {
+          return {
+            completion:
+              decisionCommand && reentrant
+                ? adoption.then(() => pendingResult(reentrant, "invalidated"))
+                : adoption.then(() => repeat(undefined)),
+          };
+        }
+        const barrier = settlementBarrier();
+        if (barrier) {
+          if (!samePending) {
+            for (const attempt of liveAttempts()) attempt.x = true;
+          }
+          return { completion: barrier.then(() => repeat(reentrant)) };
+        }
+        if (samePending && pending) {
+          return {
+            completion: publicGrantCompletion(pending, retry(pending)),
+          };
+        }
+        if (method !== undefined) {
+          const at = now();
+          let previousEffective = durable
+            ? effectivePersistedRecord(durable, runtimeFor(durable, at))
+            : null;
+          if (conservativeEffective) {
+            previousEffective = projectConservativePersistenceFailure(
+              previousEffective,
+              conservativeEffective,
+            ).effectiveRecord;
+          }
+          const base = terminal
+            ? currentRecord
+            : pending?.z
+              ? currentRecord
+              : currentState?.record
+                ? toConsentRecord(currentState.record)
+                : failed
+                  ? durable
+                  : undefined;
+          const stateCandidate =
+            currentState?.pendingGrant?.kind === "decision"
+              ? currentState.pendingGrant.candidate
+              : undefined;
+          const recordId =
+            base?.recordId ??
+            stateCandidate?.recordId ??
+            pending?.c.recordId ??
+            intent.p?.c.recordId ??
+            identifier(options.idGenerator("record"), "record");
+          const active = reentrant ?? intent.p ?? preactivation();
+          const restore = active?.k === "restore" ? active : undefined;
+          let transitionId =
+            intent.t ??
+            restore?.t ??
+            identifier(options.idGenerator("transition"), "transition");
+          const command = decision(at, method, recordId, granted);
+          let prepared = prepare(base, command, at, transitionId);
+          if (restore && prepared.k !== "bad" && prepared.k !== "same") {
+            transitionId =
+              intent.t ??
+              identifier(options.idGenerator("transition"), "transition");
+            prepared = prepare(base, command, at, transitionId);
+          }
+          if (prepared.k === "bad") {
+            return completed(
+              Object.freeze({ issues: prepared.i, outcome: "rejected" as const }),
+            );
+          }
+          if (!activateCommand(intent)) {
+            if (terminal) return completed(supersededDecision());
+            const barrier = preparingTerminalBarrier(intent);
+            return {
+              completion: barrier
+                ? barrier.then(() => decide(method, granted, reentrant, intent))
+                : Promise.resolve(supersededGrantIntent()),
+            };
+          }
+          if (reserved === active && reentrant === undefined) reserved = undefined;
+          if (prepared.k === "same" && active && base) {
+            if (!terminal && active.k === "restore") {
+              return {
+                completion: publicGrantCompletion(active, retry(active)),
+              };
+            }
+            const plan = await terminalProgram(
+              active,
+              preparedTerminal(base, at, transitionId),
+              terminal ? at : undefined,
+              intent,
+            );
+            return terminal
+              ? plan
+              : {
+                  completion: plan.completion.then((result) =>
+                    result.outcome === "committed" ? unchanged(base, at) : result,
+                  ),
+                };
+          }
+          if (!terminal && prepared.k === "same" && failed && base) {
+            const captured = ports();
+            const staged = frozenState({
+              pendingGrant: { kind: "restore", transitionId },
+              record: toPersistedDecisionRecord(base),
+            });
+            const attempt = resumed(staged, context, at);
+            attempt.l = physical(undefined);
+            attempt.p = captured;
+            attempt.B = intent;
+            reserveAttempt(attempt, false);
+            return stageDecision(
+              attempt,
+              attempt.l,
+              staged,
+              previousEffective,
+              false,
+            );
+          }
+          if (prepared.k === "terminal" && active) {
+            return terminalProgram(active, prepared, at, intent);
+          }
+          if (prepared.k === "grant") {
+            const tracked = liveAttempts();
+            for (const prior of tracked) prior.x = true;
+            const captured = ports();
+            const baseState = base
+              ? frozenState({ record: toPersistedDecisionRecord(base) })
+              : undefined;
+            const predecessors = physical(pending);
+            const stagedRecord = currentState?.record ?? baseState?.record;
+            const staged = frozenState({
+              ...(stagedRecord ? { record: stagedRecord } : {}),
+              pendingGrant: {
+                candidate: prepared.c,
+                kind: "decision",
+                receiptOccurredAt: at,
+                transitionId,
+              },
+            });
+            const attempt = descriptor(prepared, staged, at, transitionId);
+            attempt.B = intent;
+            attempt.g =
+              method === "granular" ? grantedPurposeIds(prepared.c) : EMPTY;
+            attempt.l = predecessors;
+            attempt.m = method;
+            attempt.p = captured;
+            reserveAttempt(attempt, false);
+            return stageDecision(
+              attempt,
+              predecessors,
+              staged,
+              previousEffective,
+              true,
+            );
+          }
+          if (prepared.k === "same") {
+            if (!base) throw new TypeError("Unchanged decision has no record.");
+            if (terminal && failed) {
+              return terminalProgram(
+                undefined,
+                preparedTerminal(base, at, transitionId),
+                at,
+                intent,
+              );
+            }
+            currentRecord = base;
+            const result = unchanged(base, at);
+            snapshot = makeSnapshot(
+              "ready",
+              result.runtime,
+              snapshot.lastPersistenceStatus,
+            );
+            publish();
+            return completed(result);
+          }
+          return terminalProgram(undefined, prepared, at, intent);
+        }
+        const pendingCandidate =
+          currentState?.pendingGrant?.kind === "decision"
+            ? currentState.pendingGrant.candidate
+            : undefined;
+        if (!durable && !active) {
+          return completed(noPending());
+        }
+        if (!intent.a && !reserveTerminal(intent)) {
+          return completed(superseded());
+        }
+        if (!ownsCommand(intent)) return completed(superseded());
+        const at = now();
+        const transitionId =
+          intent.t ?? identifier(options.idGenerator("transition"), "transition");
+        const source = active
+          ? currentRecord ?? toConsentRecord(pendingCandidate ?? active.c)
+          : durable;
+        if (!source) throw new TypeError("Withdrawal has no active record.");
+        const withdrawal = currentRecord || !active
+          ? withdrawConsent(source, at)
+          : undefined;
+        if (withdrawal?.ok && withdrawal.outcome === "changed") {
+          return terminalProgram(
+            active,
+            preparedTerminal(
+              withdrawal.record,
+              at,
+              transitionId,
+              withdrawal.previousRecord,
+            ),
+            at,
+            intent,
+          );
+        }
+        if (withdrawal?.ok) {
+          return active
+            ? terminalProgram(
+                active,
+                preparedTerminal(source, at, transitionId),
+                undefined,
+                intent,
+              )
+            : completed(unchanged(withdrawal.record, at));
+        }
+        if (withdrawal && !active) {
+          return completed(
+            Object.freeze({
+              issues: withdrawal.issues,
+              outcome: "rejected" as const,
+            }),
+          );
+        }
+        const prepared = prepare(
+          undefined,
+          decision(at, "reject-all", source.recordId, EMPTY),
+          at,
+          transitionId,
+        );
+        if (prepared.k !== "terminal") {
+          throw new TypeError("Pending grant cancellation could not be prepared.");
+        }
+        return terminalProgram(active, prepared, at, intent);
+      };
+      const scheduled = await (terminal && (decisionCommand || intent.a)
+        ? operation()
+        : queue(0, operation));
+      return await scheduled.completion;
+    } finally {
+      if (terminal) {
+        await rollbackTerminalReservation(intent);
+        if (!decisionCommand && reserved === intent.p) reserved = undefined;
+        releaseInitializingTerminal(intent);
+        completeTerminalIntent(intent);
+      }
+    }
+  }
+
+  const decide = (
+    method: "accept-all" | "granular" | "reject-all",
+    granted: readonly string[] = EMPTY,
+    reentrant?: Attempt,
+    intent = command(),
+  ): Promise<ConsentRuntimeDecisionResult> =>
+    terminalCommand(method, granted, reentrant, intent);
+  const retryWork = async (
+    attempt: Attempt,
+    generation: number,
+  ): Promise<ConsentRuntimeDecisionResult> => {
+    const owns = () =>
+      pending === attempt &&
+      !attempt.x &&
+      attempt.n === generation &&
+      attempt.q !== undefined;
+    const invalidated = () =>
+      pendingResult(attempt, "invalidated", [
+        { code: "grant-activation-conflict" },
+        { code: "grant-superseded" },
+      ]);
+    const plan = await queue(0, async () => {
+      const terminalStorage = terminalPending?.s;
+      if (terminalStorage) {
+        return {
+          completion: terminalStorage
+            .catch(() => undefined)
+            .then(() => retryWork(attempt, generation)),
+        };
+      }
+      if (!owns()) {
+        return completed(invalidated());
+      }
+      let at: number;
+      try {
+        at = reproject(attempt);
+      } catch (error) {
+        blockAttempt(attempt);
+        return { completion: correction(attempt, { error }) };
+      }
+      const persistenceRetry = attempt.z !== undefined;
+      const lineage = persistenceRetry ? attempt.l : Object.freeze([attempt.s]);
+      const receipt =
+        attempt.k === "decision" ? at : undefined;
+      const staged =
+        attempt.k === "decision"
+          ? (() => {
+              if (receipt === undefined) {
+                throw new TypeError("Decision retry has no receipt occurrence.");
+              }
+              return frozenState({
+                ...(attempt.s.record ? { record: attempt.s.record } : {}),
+                pendingGrant: {
+                  candidate: attempt.c,
+                  kind: "decision",
+                  receiptOccurredAt: receipt,
+                  transitionId: attempt.t,
+                },
+              });
+            })()
+          : attempt.s;
+      const next: Attempt = {
+        ...attempt,
+        A: undefined,
+        C: undefined,
+        D: undefined,
+        h: receipt ?? attempt.h,
+        i: undefined,
+        j: false,
+        l: lineage,
+        n: 0,
+        o: false,
+        q: undefined,
+        r: receipt,
+        s: staged,
+        u: false,
+        v: undefined,
+        w: false,
+        x: false,
+        z: undefined,
+      };
+      const mustWrite = persistenceRetry || attempt.k === "decision";
+      reserveAttempt(next, false);
+      const restaged = mustWrite
+        ? await trackStage(
+            next,
+            restage(
+              next.p.store,
+              lineage,
+              staged,
+              stageGuard(next),
+              persistenceRetry,
+            ),
+          )
+        : {};
+      if (!owns()) {
+        if (staging === next) staging = undefined;
+        attempts.delete(next);
+        return completed(invalidated());
+      }
+      if (restaged.f !== undefined) {
+        return failedStage(
+          next,
+          { code: restaged.f },
+          staged,
+          effectivePersistedRecord(next.b.record, next.b.runtime),
+          "p" in restaged ? restaged.p : undefined,
+          true,
+          restaged.u === true,
+        );
+      }
+      next.l = Object.freeze([staged]);
+      install(next, staged);
+      return { completion: schedule(next) };
+    });
+    return plan.completion;
+  };
+  const retry = (attempt: Attempt): Promise<ConsentRuntimeDecisionResult> => {
+    if (attempt.j) {
+      return Promise.resolve(
+        attempt.x
+          ? pendingResult(attempt, "invalidated", [
+              { code: "grant-activation-conflict" },
+              { code: "grant-superseded" },
+            ])
+          : pendingResult(attempt),
+      );
+    }
+    if (attempt.q) return attempt.q;
+    const generation = (attempt.n += 1);
+    return track(attempt, retryWork(attempt, generation));
+  };
+  const noPending = () =>
+    Object.freeze({ outcome: "not-applicable", runtime: snapshot.runtime });
+  const retryPending = async () => {
+    if (!initialized) {
+      await initialize();
+      return initializationPending ?? noPending();
+    }
+    return pending ? retry(pending) : noPending();
+  };
+  const refresh = async () => {
+    const reentrantExpiry = invokingExpiry;
+    await initialize();
+    await retrySignalFailures();
+    const prepared = await queue(0, () => {
+      if (terminalPending) return "terminal" as const;
+      const activeRecord = pending?.z ? pending.b.record : currentRecord;
+      if (expiry || (pending && !pending.z) || !activeRecord) return expiry;
+      const status = snapshot.runtime.policyReconciliation?.status;
+      if (
+        status !== "current" &&
+        status !== "requires-reconsent" &&
+        !(status === "expired" && expiryPreparing)
+      ) {
+        return undefined;
+      }
+      const runtime = runtimeFor(activeRecord, now());
+      if (runtime.policyReconciliation?.status !== "expired") return undefined;
+      const previous = snapshot;
+      if (status !== "expired") {
+        expiryPreparing = true;
+        snapshot = makeSnapshot(
+          "ready",
+          runtime,
+          previous.lastPersistenceStatus,
+          previous.diagnostics,
+        );
+        publish();
+      }
+      const expiryEffect = Object.freeze({
+        events: EMPTY,
+        persistenceStatus: previous.lastPersistenceStatus ?? "confirmed",
+        record: activeRecord,
+        runtime,
+        transitionId: identifier(options.idGenerator("transition"), "transition"),
+      });
+      const expiryOwner = claimSignal(expiryEffect);
+      expiryOwner.d = true;
+      expiry = {
+        c: { broadcast: false, reconcile: false },
+        e: expiryEffect,
+        o: expiryOwner,
+        p: ports(),
+        q: undefined,
+      };
+      expiryPreparing = false;
+      return expiry;
+    });
+    if (!prepared || prepared === "terminal") return snapshot;
+    prepared.q ??= queue(1, async () => {
+      for (const port of STEPS.expiry) {
+        if (prepared.c[port]) continue;
+        const active = { a: prepared, p: port } as const;
+        activeExpiry = active;
+        try {
+          let completion: Promise<void>;
+          invokingExpiry = true;
+          try {
+            completion = ownedPort(prepared.o, prepared.p, port, prepared.e);
+          } finally {
+            invokingExpiry = false;
+          }
+          await completion;
+        } finally {
+          if (activeExpiry === active) activeExpiry = undefined;
+        }
+        prepared.c[port] = true;
+      }
+      if (expiry === prepared) {
+        expiry = undefined;
+      }
+    });
+    if (reentrantExpiry || running) return snapshot;
+    try {
+      await prepared.q;
+    } catch (error) {
+      prepared.q = undefined;
+      throw error;
+    }
+    await signalTail;
+    return snapshot;
+  };
+  // Another tab's stored decision, adopted without a write or a receipt.
+  // A grant tells Consent Mode before resources start; anything else blocks first.
+  const adoptionBusy = () =>
+    pending !== undefined ||
+    staging !== undefined ||
+    reserved !== undefined ||
+    running !== undefined ||
+    terminalPending !== undefined ||
+    initializingTerminal !== undefined ||
+    expiry !== undefined ||
+    activeExpiry !== undefined;
+  const adoptStoredDecision = async (): Promise<OpenCookieAdoptionResult> => {
+    await initialize();
+    const ready = await queue(0, async () => {
+      if (adoptionBusy()) return;
+      // A withdrawal or rejection skips this queue. Remember the decision
+      // before the read, and keep the old read if this tab decides meanwhile.
+      const seenState = currentState;
+      const seenWater = highWater;
+      const intent = command();
+      const seenCommand = commandGeneration;
+      const base = await persistedBase(true, intent);
+      const record = base.record;
+      const state = base.state;
+      if (
+        adoptionBusy() ||
+        commandGeneration !== seenCommand ||
+        currentState !== seenState ||
+        highWater !== seenWater ||
+        !base.adopted ||
+        record === undefined ||
+        state?.record === undefined ||
+        state.pendingGrant !== undefined
+      ) {
+        return;
+      }
+      const runtime = runtimeFor(record, now());
+      const reconciliation = runtime.policyReconciliation;
+      if (
+        reconciliation === undefined ||
+        reconciliation.status === "invalid" ||
+        reconciliation.issues.some(
+          (issue) => issue.code === "policy-history-missing",
+        )
+      ) {
+        return;
+      }
+      if (same(state, currentState)) return "unchanged" as const;
+      const prior = snapshot.runtime.permittedPurposeIds;
+      adoptPersistedBase(base);
+      snapshot = makeSnapshot(
+        "ready",
+        runtime,
+        "confirmed",
+        EMPTY,
+        prompt(runtime),
+      );
+      publish();
+      const transition = effect(
+        Object.freeze({ events: EMPTY, record, runtime }),
+        "confirmed",
+        `${record.recordId}:${String(record.revision)}`,
+      );
+      const owner = claimSignal(transition);
+      owner.d = true;
+      return {
+        captured: ports(),
+        opened: runtime.permittedPurposeIds.some(
+          (purposeId) => !prior.includes(purposeId),
+        ),
+        owner,
+        transition,
+      };
+    });
+    if (ready === undefined) return "unavailable";
+    if (ready === "unchanged") return ready;
+    await queue(1, async () => {
+      for (const port of ready.opened
+        ? (["broadcast", "reconcile"] as const)
+        : STEPS.expiry) {
+        await ownedPort(ready.owner, ready.captured, port, ready.transition);
+      }
+    });
+    return "adopted";
+  };
+  const withdraw = (
+    reentrant?: Attempt,
+    intent = command(),
+  ): Promise<OpenCookieWithdrawalResult> =>
+    terminalCommand(undefined, EMPTY, reentrant, intent);
+
+  return Object.freeze({
+    acceptAll: () => decide("accept-all"),
+    adoptStoredDecision,
+    closePreferences() {
+      const persistenceFailure =
+        snapshot.pendingGrant?.phase === "persistence" ||
+        snapshot.lastPersistenceStatus?.startsWith("failed") === true;
+      if (
+        !snapshot.preferencesOpen ||
+        (prompt(snapshot.runtime) && !persistenceFailure)
+      ) {
+        return;
+      }
+      snapshot = Object.freeze({ ...snapshot, preferencesOpen: false });
+      publish();
+    },
+    getServerSnapshot: () => serverSnapshot,
+    getSnapshot: () => snapshot,
+    initialize,
+    openPreferences() {
+      if (snapshot.preferencesOpen) return;
+      snapshot = Object.freeze({ ...snapshot, preferencesOpen: true });
+      publish();
+    },
+    refresh,
+    rejectAll: () =>
+      invoking ? portContext(invoking).rejectAll() : decide("reject-all"),
+    retryPendingGrant: retryPending,
+    savePreferences: (grantedPurposeIds: readonly string[]) =>
+      decide("granular", [...grantedPurposeIds]),
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    withdrawConsent: () =>
+      invoking ? portContext(invoking).withdrawConsent() : withdraw(),
+  });
+}

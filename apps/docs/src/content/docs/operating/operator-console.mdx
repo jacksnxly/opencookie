@@ -1,0 +1,139 @@
+---
+title: The operator console
+description: Run the self-hosted web surface, sign in with an operator token, and understand what the session does and where it listens.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Everything an operator does has a command. The console puts the same work
+behind a browser for the people on your team who would rather not use a
+terminal. It is part of the package you already installed, it stores nothing of
+its own, and it calls exactly the commands the terminal calls, so the two cannot
+disagree about what is allowed.
+
+## Start it
+
+| Step               | Command                            |
+| ------------------ | ---------------------------------- |
+| Start the console  | `opencookie serve`                 |
+| Choose the port    | `opencookie serve --port 8080`     |
+| Point at a project | `opencookie serve --cwd /srv/shop` |
+
+The console prints the address to open and, when you did not supply one, a
+token generated for that run. Open the address, type the token on the sign-in
+page, and the browser holds a session from then on.
+
+Set `OPENCOOKIE_OPERATOR_TOKEN` to keep one token across restarts. It must be at
+least 32 characters, as long as a generated one; a shorter token is refused. A
+token you supply is used as given and never printed: repeating it would write a
+long-lived secret into terminal scrollback and into whatever collects that
+output. After five wrong tokens, from the sign-in page or a bearer header, the
+console answers `429` with `Retry-After` for a second, doubling with each further
+wrong token up to a minute. The right token clears the count.
+
+## Where it listens
+
+By default the console binds `127.0.0.1` and is reachable only from the machine
+it runs on. That is deliberate: the console reaches a site's policy and its
+visitors' consent evidence, so trying the command must not put that on a
+network.
+
+| To reach it from another machine | What to do                                                               |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| One person, occasionally         | Leave it on loopback and forward the port over SSH                       |
+| A team, permanently              | Put HTTPS in front of it and start it with `--host` and `--behind-proxy` |
+
+`--behind-proxy` is what makes the console believe an `X-Forwarded-Proto`
+header. Without it that header is only a claim by whoever sent it, so the
+console ignores it and treats the connection as unencrypted.
+
+<Aside type="caution">
+  A console bound beyond loopback without HTTPS sends the operator token and the
+  session cookie in the clear. The console says so when it starts and on the
+  sign-in page; it does not stop you, because only you know what the network
+  between you and it is.
+</Aside>
+
+## What each page is allowed to do
+
+Every page the console serves, including a refusal, carries
+`Content-Security-Policy: default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
+along with `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
+The pages load no script, style or image of their own, so a string that ever
+escaped its escaping has nothing to fetch and nowhere to post, and the console
+cannot be framed by another page.
+
+## What the session does
+
+- **The cookie is HttpOnly and SameSite,** so script on a page cannot read it
+  and another site cannot make your browser send it along.
+- **It is marked Secure only over an encrypted connection.** Marking it Secure
+  on a plain connection would stop the browser sending it at all, which looks
+  like a broken sign-in rather than a warning.
+- **Sessions live in the running process.** Restarting the console signs
+  everyone out. Nothing claims to remember a session that no longer exists.
+- **A change needs the page's own form.** Every write carries a token that
+  belongs to your session, so a request another site provoked in your browser
+  changes nothing.
+
+## What it covers today
+
+| In the console       | What it does                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| The list of sites    | Every registered site, its hostnames, and links to its three pages                                           |
+| Creating a site      | The same rules as the command line, including one hostname to one site                                       |
+| A site's findings    | What `opencookie findings list` reports, and a form for each finding still undecided                         |
+| A site's policy      | What `opencookie policy status` reports, plus writing a starter, publishing it and installing it             |
+| A site's evidence    | What `opencookie evidence query` reports, narrowed by consent id or date, plus export, retention and erasure |
+| What a site enforces | What `opencookie doctor` reports for that site, read only                                                    |
+
+So a new operator reaches a published policy without leaving the browser: install
+the package, run `opencookie serve`, then sign in, create the site, decide what
+each finding is, write the starter, edit its wording, and publish.
+
+Deciding what a finding is asks for every field the decision needs: the purpose,
+the vendor, the service, the data category, the plain-language disclosure, the
+retention, what happens on withdrawal, and whether it is strictly necessary. A
+finding with no decision never reaches a policy, in the console exactly as on the
+command line, and the form stops being offered once nothing is left to decide.
+
+## Publishing and installing are two steps
+
+Publishing records an operator decision and its history. Installing is what
+makes the site enforce it: it writes the policy module the runtime reads, and
+until it runs, visitors are deciding against the policy that is still installed.
+The policy page offers the install only once something is published, and the
+doctor page reports a stale installed policy until it has been run.
+
+## Checking what a site enforces
+
+The doctor page reports the same diagnostics the command reports for that site: whether a policy is published, whether the declaration visitors are
+shown matches it, and whether the policy module the site installed is the one
+that is live. A problem means the site is not enforcing what it published, and
+the page says so rather than listing codes and stopping.
+
+It only reads. Each diagnostic names the command that fixes it, and fixing
+stays with that command, so nothing changes while you are looking at it.
+
+## Acting on consent evidence
+
+The evidence page narrows the list by consent id, by date, or both, and shows
+the filter it applied so the page says which receipts these are. Three actions
+sit below it, each in its own form:
+
+| Action                        | What it does                                                    |
+| ----------------------------- | --------------------------------------------------------------- |
+| Export these receipts         | Writes the receipts currently listed to a new file under `opencookie/`, inside that site; any other path is refused, since receipts are personal data |
+| Apply this retention period   | Removes receipts decided before the cutoff, for good            |
+| Erase this visitor's receipts | Removes everything recorded for one consent id, for good        |
+
+Erasure and retention are not reversible and the page says so before you use
+them. Each one, and the export, needs the session's own form token, so a request
+another site provoked in your browser cannot reach them.
+
+What the console refuses to do is ingest receipts: that is how evidence gets
+recorded, and a console that accepted it from a URL could write receipts nobody
+ever gave. Ingestion stays on the command line.
+
+OpenCookie is a technical tool. What the console shows you is what your project
+recorded, not advice about what the law requires of you.

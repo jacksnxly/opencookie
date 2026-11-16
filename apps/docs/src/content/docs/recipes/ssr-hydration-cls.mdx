@@ -1,0 +1,20 @@
+---
+title: SSR, hydration, and CLS
+description: Use a deterministic server snapshot and a stable host to avoid hydration drift and layout shift.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+OpenCookie construction performs no storage or browser access. The first server and client render can use the same uninitialized snapshot.
+
+<RunnableSample id="ssr-snapshot" title="server-state.ts" />
+
+<Steps>
+1. Construct one request-safe or application-safe client without reading storage.
+2. Render a stable host and reserve its intended geometry.
+3. Call `initialize()` in the client lifecycle. The restored or first-visit snapshot then publishes through the external store.
+4. Keep the host outside route-owned content so SPA navigation cannot strand it.
+</Steps>
+
+The vanilla presentation uses a fixed overlay and does not insert a document-flow spacer. Measure CLS in the real framework fixture because fonts, transitions, and application shells can still shift independently.

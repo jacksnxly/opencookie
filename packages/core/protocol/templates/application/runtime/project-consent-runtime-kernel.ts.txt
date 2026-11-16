@@ -1,0 +1,395 @@
+import {
+  evaluateConsent,
+  type ConsentEvaluation,
+  type ConsentPolicyInput,
+  type ConsentRecord,
+  type PurposeDecisionState,
+} from "../../domain/consent-decisioning/runtime.js";
+import type {
+  DefinedResourcePolicy,
+  PolicySnapshot,
+} from "../../domain/policy-catalogue/index.js";
+import { isSupportedPolicyIdentity } from "../../domain/policy-catalogue/runtime.js";
+import type { ProcessingRestrictionSet } from "../../domain/privacy-preference-resolution/index.js";
+import {
+  resolvePermittedPurposes,
+  type AccessConsentSnapshot,
+  type AccessPolicySnapshot,
+  type EffectiveAccessPlan,
+  type ResolveEffectiveAccessInput,
+  type ServicePreferenceRecord,
+} from "../../domain/terminal-enforcement/index.js";
+import type {
+  ConsentPolicyReconciliation,
+  ConsentPolicyReconciliationIssue,
+} from "../../reconciliation/contract.js";
+import type { ConsentRuntimePolicyProjector } from "./consent-policy-reconciliation-contract.js";
+
+/** @public */
+export interface ConsentRuntimeProjectionInput {
+  readonly consentRecord?: ConsentRecord;
+  readonly now: number;
+  readonly policyHistory?: readonly PolicySnapshot[];
+  readonly policySnapshot: PolicySnapshot;
+  readonly privacyRestrictions?: ProcessingRestrictionSet;
+  readonly resourcePolicy: DefinedResourcePolicy;
+  readonly servicePreferences?: ServicePreferenceRecord;
+}
+
+/** @public */
+export interface ConsentRuntimeProjection {
+  readonly accessConsent: AccessConsentSnapshot;
+  readonly accessPolicy: AccessPolicySnapshot;
+  readonly consentEvaluation: ConsentEvaluation;
+  readonly consentPolicy: ConsentPolicyInput;
+  readonly effectiveAccess: EffectiveAccessPlan;
+  readonly policyReconciliation?: ConsentPolicyReconciliation;
+  /**
+   * Policy purposes a privacy signal restricts, in policy order. A grant for
+   * one of them is recorded but never active, so a presentation must not show
+   * it as granted.
+   */
+  /**
+   * The optional purposes the decision permits now, by the rule that blocks
+   * resources, for bridges to vendors OpenCookie does not load itself.
+   */
+  readonly permittedPurposeIds: readonly string[];
+  readonly restrictedPurposeIds: readonly string[];
+}
+
+function equalStringSets(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return (
+    rightSet.size === right.length && left.every((value) => rightSet.has(value))
+  );
+}
+
+function resourcePolicyMatchesSnapshot(
+  snapshot: PolicySnapshot,
+  resourcePolicy: DefinedResourcePolicy,
+): boolean {
+  const purposeIds = snapshot.policy.purposes.map((purpose) => purpose.id);
+  if (!equalStringSets(purposeIds, resourcePolicy.purposeIds)) return false;
+
+  const knownPurposeIds = new Set(purposeIds);
+  const serviceIds = new Set(
+    resourcePolicy.services.map((service) => service.id),
+  );
+  if (
+    serviceIds.size !== resourcePolicy.services.length ||
+    resourcePolicy.services.some((service) => service.id.trim().length === 0)
+  ) {
+    return false;
+  }
+
+  const resourceIds = new Set<string>();
+  for (const resource of resourcePolicy.resources) {
+    if (
+      resource.id.trim().length === 0 ||
+      resourceIds.has(resource.id) ||
+      !serviceIds.has(resource.serviceId) ||
+      (resource.access === "optional" && resource.purposeIds.length === 0) ||
+      (resource.access === "declared-exception" &&
+        resource.exceptionReason.trim().length === 0) ||
+      resource.purposeIds.some((purposeId) => !knownPurposeIds.has(purposeId))
+    ) {
+      return false;
+    }
+    resourceIds.add(resource.id);
+  }
+  return true;
+}
+
+/** @public */
+export function projectConsentPolicy(
+  snapshot: PolicySnapshot,
+): ConsentPolicyInput {
+  return Object.freeze({
+    catalogueDigest: snapshot.catalogueDigest,
+    decisionSurfaceDigest: snapshot.decisionSurfaceDigest,
+    optionalPurposeIds: Object.freeze(
+      snapshot.policy.purposes.map((purpose) => purpose.id),
+    ),
+    policyVersion: snapshot.policyVersion,
+  });
+}
+
+/** @public */
+export function projectAccessPolicy(
+  snapshot: PolicySnapshot,
+  resourcePolicy: DefinedResourcePolicy,
+): AccessPolicySnapshot {
+  return Object.freeze({
+    purposes: Object.freeze(
+      snapshot.policy.purposes.map((purpose) =>
+        Object.freeze({
+          dependsOn: Object.freeze([...purpose.dependsOn]),
+          id: purpose.id,
+        }),
+      ),
+    ),
+    resources: Object.freeze(
+      resourcePolicy.resources.map((resource) =>
+        Object.freeze(
+          resource.access === "declared-exception"
+            ? {
+                access: resource.access,
+                exceptionReason: resource.exceptionReason,
+                id: resource.id,
+                ...(resource.label === undefined
+                  ? {}
+                  : { label: resource.label }),
+                purposeIds: Object.freeze([...resource.purposeIds]),
+                serviceId: resource.serviceId,
+              }
+            : {
+                access: resource.access,
+                id: resource.id,
+                purposeIds: Object.freeze([...resource.purposeIds]),
+                ...(resource.purposeMatch === undefined
+                  ? {}
+                  : { purposeMatch: resource.purposeMatch }),
+                serviceId: resource.serviceId,
+              },
+        ),
+      ),
+    ),
+    valid: resourcePolicyMatchesSnapshot(snapshot, resourcePolicy),
+  });
+}
+
+/** @public */
+export function projectAccessConsent(
+  record: ConsentRecord | undefined,
+  evaluation: ConsentEvaluation,
+  policy: ConsentPolicyInput,
+): AccessConsentSnapshot {
+  const status =
+    evaluation.status === "invalid" ? "requires-reconsent" : evaluation.status;
+  const mayUseRecordedDecisions =
+    record !== undefined && evaluation.status !== "invalid";
+  const decisionsByPurpose = new Map(
+    mayUseRecordedDecisions
+      ? record.decisions.map((decision) => [decision.purposeId, decision.value])
+      : [],
+  );
+
+  return Object.freeze({
+    decisions: Object.freeze(
+      policy.optionalPurposeIds.map((purposeId) =>
+        Object.freeze({
+          decision: decisionsByPurpose.get(purposeId) ?? "unresolved",
+          purposeId,
+        }),
+      ),
+    ),
+    status,
+  });
+}
+
+function projectReconciledAccessConsent(
+  reconciliation: ConsentPolicyReconciliation,
+  policy: ConsentPolicyInput,
+): AccessConsentSnapshot {
+  const decisions = new Map(
+    reconciliation.decisions.map(({ purposeId, value }) => [purposeId, value]),
+  );
+  return Object.freeze({
+    decisions: Object.freeze(
+      policy.optionalPurposeIds.map((purposeId) =>
+        Object.freeze({
+          decision: decisions.get(purposeId) ?? "unresolved",
+          purposeId,
+        }),
+      ),
+    ),
+    status:
+      reconciliation.status === "current"
+        ? "active"
+        : reconciliation.status === "invalid"
+          ? "requires-reconsent"
+          : reconciliation.status,
+  });
+}
+
+function frozenDecisions(
+  record: ConsentRecord,
+  policy: ConsentPolicyInput,
+  preserveGrants: boolean,
+): readonly PurposeDecisionState[] {
+  const recorded = new Map(
+    record.decisions.map(({ purposeId, value }) => [purposeId, value]),
+  );
+  return Object.freeze(
+    policy.optionalPurposeIds
+      .map((purposeId) => {
+        const value = recorded.get(purposeId);
+        return Object.freeze({
+          purposeId,
+          value:
+            value === "denied" || (preserveGrants && value === "granted")
+              ? value
+              : ("unresolved" as const),
+        });
+      })
+      .sort((left, right) =>
+        left.purposeId < right.purposeId
+          ? -1
+          : left.purposeId > right.purposeId
+            ? 1
+            : 0,
+      ),
+  );
+}
+
+function compactReconciliation(
+  record: ConsentRecord,
+  currentPolicy: PolicySnapshot,
+  now: number,
+): ConsentPolicyReconciliation {
+  const policy = projectConsentPolicy(currentPolicy);
+  const evaluation = evaluateConsent(record, policy, now);
+  const hasSupportedRecordIdentity =
+    isSupportedPolicyIdentity(record.policy.catalogueDigest) &&
+    isSupportedPolicyIdentity(record.policy.decisionSurfaceDigest) &&
+    record.policy.policyVersion.trim().length > 0;
+  const hasCurrentIdentity =
+    record.policy.catalogueDigest === policy.catalogueDigest &&
+    record.policy.decisionSurfaceDigest === policy.decisionSurfaceDigest &&
+    record.policy.policyVersion === policy.policyVersion;
+  const validForeignWithdrawal =
+    !hasCurrentIdentity &&
+    record.method === "withdrawal" &&
+    hasSupportedRecordIdentity &&
+    evaluateConsent(
+      record,
+      Object.freeze({
+        ...policy,
+        catalogueDigest: record.policy.catalogueDigest,
+        decisionSurfaceDigest: record.policy.decisionSurfaceDigest,
+        policyVersion: record.policy.policyVersion,
+      }),
+      now,
+    ).status === "withdrawn";
+  const status = validForeignWithdrawal
+    ? ("withdrawn" as const)
+    : evaluation.status === "active"
+      ? hasCurrentIdentity
+        ? ("current" as const)
+        : ("invalid" as const)
+      : evaluation.status === "first-visit"
+        ? ("invalid" as const)
+        : evaluation.status;
+  const preserveGrants = status === "current" || status === "withdrawn";
+  const decisions = frozenDecisions(record, policy, preserveGrants);
+  const issues: readonly ConsentPolicyReconciliationIssue[] =
+    status === "invalid" || validForeignWithdrawal
+      ? Object.freeze([
+          Object.freeze({
+            ...(!hasCurrentIdentity
+              ? {
+                  code: "policy-history-missing" as const,
+                  path: "policyHistory" as const,
+                }
+              : {
+                  code: "invalid-consent-record" as const,
+                  path: evaluation.issues[0]?.path ?? "current",
+                }),
+          }),
+        ])
+      : Object.freeze([]);
+  return Object.freeze({
+    affectedPurposes: Object.freeze(
+      decisions
+        .filter(({ value }) => value === "unresolved")
+        .map(({ purposeId }) =>
+          Object.freeze({
+            purposeId,
+            reasonCodes: Object.freeze(["identity-unverified"]),
+          }),
+        ),
+    ),
+    decisions,
+    issues,
+    policy: Object.freeze({
+      catalogueDigest: policy.catalogueDigest,
+      decisionSurfaceDigest: policy.decisionSurfaceDigest,
+      policyVersion: policy.policyVersion,
+    }),
+    prompt: status !== "current" && status !== "withdrawn",
+    status,
+  });
+}
+
+/** Compact current-only projector used exclusively by the auto composition. */
+export const projectCurrentConsentPolicy: ConsentRuntimePolicyProjector = (
+  input,
+) => compactReconciliation(input.record, input.currentPolicy, input.now);
+Object.freeze(projectCurrentConsentPolicy);
+
+export function projectConsentRuntimeStateWith(
+  input: ConsentRuntimeProjectionInput,
+  projectPolicy: ConsentRuntimePolicyProjector,
+  // The product's access rule: the generic one matches any, the compact
+  // auto product's leaves that out.
+  resolveAccess: (input: ResolveEffectiveAccessInput) => EffectiveAccessPlan,
+): ConsentRuntimeProjection {
+  const consentPolicy = projectConsentPolicy(input.policySnapshot);
+  const consentEvaluation = evaluateConsent(
+    input.consentRecord,
+    consentPolicy,
+    input.now,
+  );
+  const policyReconciliation =
+    input.consentRecord === undefined
+      ? undefined
+      : projectPolicy({
+          currentPolicy: input.policySnapshot,
+          now: input.now,
+          policyHistory: input.policyHistory ?? [input.policySnapshot],
+          record: input.consentRecord,
+        });
+  const accessConsent =
+    policyReconciliation === undefined
+      ? projectAccessConsent(
+          input.consentRecord,
+          consentEvaluation,
+          consentPolicy,
+        )
+      : projectReconciledAccessConsent(policyReconciliation, consentPolicy);
+  const accessPolicy = projectAccessPolicy(
+    input.policySnapshot,
+    input.resourcePolicy,
+  );
+  const accessInput = {
+    consent: accessConsent,
+    policy: accessPolicy,
+    ...(input.privacyRestrictions === undefined
+      ? {}
+      : { privacyRestrictions: input.privacyRestrictions }),
+    ...(input.servicePreferences === undefined
+      ? {}
+      : { servicePreferences: input.servicePreferences }),
+  };
+  const effectiveAccess = resolveAccess(accessInput);
+
+  const restricted = new Set(input.privacyRestrictions?.purposeIds);
+  return Object.freeze({
+    accessConsent,
+    accessPolicy,
+    consentEvaluation,
+    consentPolicy,
+    effectiveAccess,
+    ...(policyReconciliation === undefined ? {} : { policyReconciliation }),
+    permittedPurposeIds: resolvePermittedPurposes(accessInput),
+    restrictedPurposeIds: Object.freeze(
+      input.policySnapshot.policy.purposes
+        .map((purpose) => purpose.id)
+        .filter((purposeId) => restricted.has(purposeId)),
+    ),
+  });
+}

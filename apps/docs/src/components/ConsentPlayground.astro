@@ -1,0 +1,56 @@
+<section class="oc-playground" data-consent-playground>
+  <header>
+    <p class="oc-kicker">Local state laboratory</p>
+    <h2>See the decision, not a black box.</h2>
+    <p>
+      This playground stays in your browser. It makes no network request and
+      stores only the demo decision below.
+    </p>
+  </header>
+
+  <div class="oc-playground__stage">
+    <div class="oc-playground__panel" role="group" aria-labelledby="oc-lab-title">
+      <div>
+        <span class="oc-index">01 / CHOICE</span>
+        <h3 id="oc-lab-title">Optional purposes</h3>
+      </div>
+      <label class="oc-switch">
+        <input type="checkbox" value="analytics" data-purpose />
+        <span>
+          <strong>Aggregate analytics</strong>
+          <small>Measure product use without ad profiles.</small>
+        </span>
+      </label>
+      <label class="oc-switch">
+        <input type="checkbox" value="personalization" data-purpose />
+        <span>
+          <strong>Personalization</strong>
+          <small>Remember optional display preferences.</small>
+        </span>
+      </label>
+      <div class="oc-playground__actions">
+        <button type="button" data-decision="reject">Reject all</button>
+        <button type="button" data-decision="accept">Accept all</button>
+        <button type="button" data-decision="granular">Save choices</button>
+      </div>
+    </div>
+
+    <output class="oc-receipt" aria-live="polite" data-receipt>
+      <span class="oc-index">02 / RECEIPT</span>
+      <strong data-receipt-status>No decision yet</strong>
+      <dl>
+        <div><dt>method</dt><dd data-receipt-method>first-visit</dd></div>
+        <div><dt>analytics</dt><dd data-receipt-analytics>unresolved</dd></div>
+        <div><dt>personalization</dt><dd data-receipt-personalization>unresolved</dd></div>
+        <div><dt>storage</dt><dd>local demo only</dd></div>
+      </dl>
+      <button type="button" data-reset>Reset demo</button>
+    </output>
+  </div>
+</section>
+
+<script>
+  import { initializePlaygrounds } from "../scripts/consent-playground";
+
+  initializePlaygrounds(document);
+</script>

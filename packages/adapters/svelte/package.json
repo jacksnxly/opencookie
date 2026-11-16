@@ -1,0 +1,48 @@
+{
+  "name": "@opencookie-dev/svelte",
+  "version": "0.2.0",
+  "description": "Svelte binding for the OpenCookie headless store",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jacksnxly/opencookie.git",
+    "directory": "packages/adapters/svelte"
+  },
+  "homepage": "https://opencookie.dev",
+  "bugs": {
+    "url": "https://github.com/jacksnxly/opencookie/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown"
+  },
+  "dependencies": {
+    "@opencookie-dev/core": "workspace:^"
+  },
+  "peerDependencies": {
+    "svelte": ">=5.40.0 <6.0.0"
+  },
+  "devDependencies": {
+    "svelte": "5.56.10"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

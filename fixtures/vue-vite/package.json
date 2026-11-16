@@ -1,0 +1,25 @@
+{
+  "name": "@opencookie-fixtures/vue-vite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@opencookie-dev/core": "workspace:*",
+    "@opencookie-dev/vanilla": "workspace:*",
+    "@opencookie-dev/vue": "workspace:*",
+    "vue": "3.5.41"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@vitejs/plugin-vue": "6.0.8",
+    "@vue/tsconfig": "0.9.1",
+    "typescript": "6.0.2",
+    "vite": "8.2.2",
+    "vue-tsc": "3.3.11"
+  }
+}

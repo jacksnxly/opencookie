@@ -1,0 +1,136 @@
+import {
+  createConsentEventBatch,
+  withdrawConsent,
+  type ConsentDomainEvent,
+  type ConsentRecord,
+  type InvalidWithdrawalRecordIssue,
+  type InvalidWithdrawalTimeIssue,
+} from "../../domain/consent-decisioning/runtime.js";
+import type {
+  DefinedResourcePolicy,
+  PolicySnapshot,
+} from "../../domain/policy-catalogue/index.js";
+import type { ProcessingRestrictionSet } from "../../domain/privacy-preference-resolution/index.js";
+import type { ServicePreferenceRecord } from "../../domain/terminal-enforcement/index.js";
+import {
+  executeDenialTransitionProgram,
+  type DenialTransition,
+  type DenialTransitionDiagnostic,
+} from "../transitions/execute-denial-transition.js";
+import type {
+  ConsentRuntimeTransitionEffect,
+  DenialReceiptDiagnostic,
+} from "./execute-consent-runtime-decision-kernel.js";
+import type { ConsentRuntimeProjectionContext } from "./consent-runtime-projection-context.js";
+import { type ConsentRuntimeProjection } from "./project-consent-runtime-kernel.js";
+import { toPersistedDecisionRecord } from "./persisted-consent-record.js";
+import type {
+  CapturedConsentRuntimeKernelPorts,
+} from "./snapshot-consent-runtime-inputs.js";
+import {
+  createRuntimeTransitionProjection,
+  projectRuntimeFor,
+  projectRuntimeTransitionResult,
+} from "./consent-runtime-transition-projection-kernel.js";
+
+/** @public */
+export interface ConsentRuntimeWithdrawalCommand {
+  readonly currentRecord: ConsentRecord;
+  readonly now: number;
+  readonly policyHistory?: readonly PolicySnapshot[];
+  readonly policySnapshot: PolicySnapshot;
+  readonly privacyRestrictions?: ProcessingRestrictionSet;
+  readonly resourcePolicy: DefinedResourcePolicy;
+  readonly servicePreferences?: ServicePreferenceRecord;
+  readonly transitionId: string;
+}
+
+/** @public */
+export type ConsentRuntimeWithdrawalResult =
+  | {
+      readonly issues: readonly (
+        InvalidWithdrawalRecordIssue | InvalidWithdrawalTimeIssue
+      )[];
+      readonly outcome: "rejected";
+    }
+  | {
+      readonly outcome: "unchanged";
+      readonly record: ConsentRecord;
+      readonly runtime: ConsentRuntimeProjection;
+    }
+  | {
+      readonly effect: ConsentRuntimeTransitionEffect;
+      readonly outcome: "committed";
+      readonly transition: DenialTransition;
+    }
+  | {
+      readonly diagnostics: readonly (
+        DenialTransitionDiagnostic | DenialReceiptDiagnostic
+      )[];
+      readonly effect: ConsentRuntimeTransitionEffect;
+      readonly outcome: "degraded";
+      readonly transition: DenialTransition;
+    };
+
+/**
+ * Receipt-neutral withdrawal kernel shared by the public executor facade and
+ * the package-private client kernels. Ports are supplied through a capture
+ * closure invoked at the exact position the public executor validated its
+ * hostile inputs, so rejected and unchanged commands never observe ports.
+ */
+export async function executeConsentRuntimeWithdrawalKernel(
+  snapshotPorts: () => CapturedConsentRuntimeKernelPorts,
+  command: ConsentRuntimeWithdrawalCommand,
+  context: ConsentRuntimeProjectionContext,
+): Promise<ConsentRuntimeWithdrawalResult> {
+  const now = command.now;
+  const transitionId = command.transitionId;
+  const withdrawal = withdrawConsent(command.currentRecord, now);
+  if (!withdrawal.ok) {
+    return Object.freeze({
+      issues: withdrawal.issues,
+      outcome: "rejected",
+    });
+  }
+  if (withdrawal.outcome === "unchanged") {
+    return Object.freeze({
+      outcome: "unchanged",
+      record: withdrawal.record,
+      runtime: projectRuntimeFor(context, withdrawal.record, now),
+    });
+  }
+  const previousRecord = withdrawal.previousRecord;
+  const preparedRecord = withdrawal.record;
+  const preparedEvents: readonly ConsentDomainEvent[] = createConsentEventBatch(
+    {
+      committed: true,
+      previousRecord,
+      record: preparedRecord,
+    },
+  );
+  const preparedRuntime = projectRuntimeFor(context, preparedRecord, now);
+  const capturedPorts = snapshotPorts();
+  const [transitionPorts, effectFor] = createRuntimeTransitionProjection(
+    capturedPorts,
+    {
+      events: preparedEvents,
+      record: preparedRecord,
+      runtime: preparedRuntime,
+    },
+  );
+
+  const result = await (
+    await executeDenialTransitionProgram({
+      command: {
+        expectedRecord: toPersistedDecisionRecord(previousRecord),
+        rejection: toPersistedDecisionRecord(withdrawal.record),
+        transitionId,
+      },
+      degradeReceiptFailure: true,
+      kind: "ordinary",
+      ports: transitionPorts,
+    })
+  ).completion;
+
+  return projectRuntimeTransitionResult(result, effectFor);
+}

@@ -1,0 +1,46 @@
+---
+title: React and Vite
+description: Bind a single OpenCookie external store to a React application.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+## Verified fresh-app workflow
+
+Create an empty directory, enter it, then run these exact commands in order.
+
+- Scaffold: `pnpm dlx create-vite@9.1.2 . --template react-ts --no-interactive`
+- Install: `pnpm install --no-frozen-lockfile`
+- Initialize: `npx --yes opencookie@0.4.1 init --yes`
+- Build: `pnpm build`
+- Serve: `pnpm preview --host 127.0.0.1 --port 4173`
+
+Open `http://127.0.0.1:4173/` to inspect the production build and its initialized banner.
+
+Observed output: the retained lockfile installed its dependency set, Vite transformed 28 modules, the production build exited 0, and preview returned HTTP 200.
+
+## Browser-verified result
+
+This exact production workflow was exercised from a clean storage state in a real browser. Before consent, `opencookie-demo.js` had zero requests and zero executions. Accept all persisted across a new navigation. Analytics was then denied with Save choices, consent was withdrawn, and a final navigation again produced zero demo requests and executions.
+
+The first two images below are current-surface captures from the corresponding rebuilt repository production fixture. They are separate from the fresh-app run described above.
+
+![React and Vite consent banner before consent](/images/getting-started/react-vite/banner-preconsent.png)
+
+![React and Vite settings panel showing the optional category checkbox and Analytics purpose checkbox](/images/getting-started/react-vite/preferences-open.png)
+
+![React and Vite after withdrawal and a fresh navigation](/images/getting-started/react-vite/withdrawal-reload-blocked.png)
+
+<Steps>
+1. Run the pinned unattended initializer. The CLI installs `@opencookie-dev/core`, `@opencookie-dev/react`, and `@opencookie-dev/vanilla`, then writes the starter catalogue.
+2. Review the generated root boundary. It imports the application-owned store factory from `opencookie.config.ts`, mounts the visible interface once, and exposes the same store through React.
+
+   <RunnableSample id="react-vite" title="src/opencookie.tsx" />
+
+3. Mount the visible preferences interface once, outside route-owned content. Read state with `useOpenCookieSnapshot` or a focused `useOpenCookieSelector`.
+</Steps>
+
+The React adapter uses `useSyncExternalStore`, including the deterministic server snapshot. Avoid creating the client inside a component render.
+
+For strict CSP, pass the response nonce to the vanilla presentation mount and follow the [nonce recipe](/recipes/csp-nonce/).

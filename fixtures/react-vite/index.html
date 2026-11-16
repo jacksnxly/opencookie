@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-oc-server-gpc="__OC_SERVER_GPC__">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>OpenCookie React and Vite fixture</title>
+    <style nonce="fixture-nonce">
+      iframe[data-oc-resource] {
+        display: none;
+      }
+    </style>
+    <script defer nonce="fixture-nonce" src="/essential.js"></script>
+    <script
+      type="text/plain"
+      nonce="fixture-nonce"
+      data-oc-resource="analytics-script"
+      data-oc-category="analytics"
+      data-src="http://tracker.react-vite.opencookie.test:4400/analytics.js?resource=initial"
+    ></script>
+  </head>
+  <body>
+    <div id="root" data-fixture-root="react-vite"></div>
+    <template
+      data-oc-iframe
+      title="Optional product video"
+      data-oc-resource="product-video"
+      data-oc-category="analytics"
+      data-src="http://tracker.react-vite.opencookie.test:4400/frame"
+    ></template>
+    <script type="module" nonce="fixture-nonce" src="/src/main.tsx"></script>
+  </body>
+</html>

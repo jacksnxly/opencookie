@@ -1,0 +1,25 @@
+{
+  "catalogueRevision": "catalogue-1",
+  "policy": {
+    "categories": [{ "id": "optional", "purposeIds": ["analytics"] }],
+    "dataCategories": [{ "id": "usage-data" }],
+    "operations": [{ "id": "measurement" }],
+    "presentationRootCategoryIds": ["optional"],
+    "providers": [{ "id": "site-operator" }],
+    "purposes": [
+      {
+        "dataCategoryIds": ["usage-data"],
+        "disclosure": "Counts visits so we can see which pages are read.",
+        "id": "analytics",
+        "label": "Analytics",
+        "operationIds": ["measurement"],
+        "providerIds": ["site-operator"],
+        "recipientIds": ["site-operator"],
+        "retentionIds": ["thirteen-months"]
+      }
+    ],
+    "recipients": [{ "id": "site-operator" }],
+    "retentions": [{ "id": "thirteen-months" }]
+  },
+  "policyVersion": "1.0.0"
+}

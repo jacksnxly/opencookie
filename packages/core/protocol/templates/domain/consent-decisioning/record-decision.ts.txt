@@ -1,0 +1,425 @@
+import {
+  CONSENT_RECORD_SCHEMA_VERSION,
+  freezeConsentRecord,
+  sameDecisionSurface,
+  snapshotConsentPolicyInput,
+  snapshotCurrentConsentRecord,
+  type ConsentDecision,
+  type ConsentPolicyInput,
+  type ConsentRecord,
+  type PurposeDecision,
+} from "./consent-record.js";
+import {
+  captureDataArray,
+  captureDataProperty,
+} from "../shared/capture-data-property.js";
+
+/** @public */
+export interface RecordDecisionCommandBase {
+  readonly consentId?: string;
+  readonly decidedAt: number;
+  readonly expiresAt: number;
+  readonly locale?: string;
+  readonly recordId?: string;
+}
+
+/** @public */
+export type RecordDecisionCommand =
+  | (RecordDecisionCommandBase & {
+      readonly method: "accept-all" | "reject-all";
+    })
+  | (RecordDecisionCommandBase & {
+      readonly grantedPurposeIds: readonly string[];
+      readonly method: "granular";
+    });
+
+/** @public */
+export interface UnknownPurposeIdIssue {
+  readonly code: "unknown-purpose-id";
+  readonly path: string;
+  readonly purposeId: string;
+}
+
+/** @public */
+export interface MissingRecordIdIssue {
+  readonly code: "missing-record-id";
+  readonly path: "recordId";
+}
+
+/** @public */
+export interface InvalidDecisionTimestampIssue {
+  readonly code: "invalid-timestamp";
+  readonly path: "decidedAt" | "expiresAt";
+}
+
+/** @public */
+export interface InvalidDecisionMethodIssue {
+  readonly code: "invalid-decision-method";
+  readonly path: "method";
+}
+
+/** @public */
+export interface InvalidCurrentRecordIssue {
+  readonly code: "invalid-current-record";
+  readonly path:
+    | "current"
+    | "current.consentId"
+    | "current.decidedAt"
+    | "current.decisions"
+    | "current.expiresAt"
+    | "current.locale"
+    | "current.method"
+    | "current.policy"
+    | "current.recordId"
+    | "current.revision"
+    | "current.schemaVersion"
+    | "current.withdrawnAt";
+}
+
+/** @public */
+export interface InvalidConsentPolicyIssue {
+  readonly code: "invalid-consent-policy";
+  readonly path:
+    | "policy"
+    | "policy.catalogueDigest"
+    | "policy.decisionSurfaceDigest"
+    | "policy.optionalPurposeIds"
+    | "policy.policyVersion";
+}
+
+/** @public */
+export interface InvalidGrantedPurposeSetIssue {
+  readonly code: "invalid-granted-purpose-set";
+  readonly path: "grantedPurposeIds";
+}
+
+/** @public */
+export interface InvalidRecordIdIssue {
+  readonly code: "invalid-record-id";
+  readonly path: "recordId";
+}
+
+/** @public */
+export interface InvalidConsentIdIssue {
+  readonly code: "invalid-consent-id";
+  readonly path: "consentId";
+}
+
+/** @public */
+export interface InvalidLocaleIssue {
+  readonly code: "invalid-locale";
+  readonly path: "locale";
+}
+
+/** @public */
+export interface InvalidDecisionIntervalIssue {
+  readonly code: "invalid-decision-interval";
+  readonly path: "expiresAt";
+}
+
+/** @public */
+export interface DecisionBeforeCurrentTransitionIssue {
+  readonly code: "decision-before-current-transition";
+  readonly path: "decidedAt";
+}
+
+/** @public */
+export type RecordDecisionIssue =
+  | DecisionBeforeCurrentTransitionIssue
+  | InvalidConsentIdIssue
+  | InvalidConsentPolicyIssue
+  | InvalidCurrentRecordIssue
+  | InvalidDecisionMethodIssue
+  | InvalidDecisionIntervalIssue
+  | InvalidDecisionTimestampIssue
+  | InvalidGrantedPurposeSetIssue
+  | InvalidLocaleIssue
+  | InvalidRecordIdIssue
+  | MissingRecordIdIssue
+  | UnknownPurposeIdIssue;
+
+/** @public */
+export type RecordDecisionResult =
+  | {
+      readonly issues: readonly RecordDecisionIssue[];
+      readonly ok: false;
+    }
+  | {
+      readonly ok: true;
+      readonly outcome: "changed";
+      readonly previousRecord: ConsentRecord | null;
+      readonly record: ConsentRecord;
+    }
+  | {
+      readonly ok: true;
+      readonly outcome: "unchanged";
+      readonly record: ConsentRecord;
+    };
+
+function captureGrantedPurposeIds(
+  captured: PropertyDescriptor | null | undefined,
+): { readonly ok: false } | { readonly ok: true; readonly values: unknown[] } {
+  if (captured === undefined) return { ok: false };
+  const values = captureDataArray(captured?.value);
+  return values === undefined ? { ok: false } : { ok: true, values };
+}
+
+export function freezeIssues<Issue extends object>(
+  issues: readonly Issue[],
+): readonly Issue[] {
+  return Object.freeze(issues.map((issue) => Object.freeze({ ...issue })));
+}
+
+function decisionValue(
+  method: RecordDecisionCommand["method"],
+  purposeId: string,
+  grantedPurposeIds: ReadonlySet<string>,
+): ConsentDecision {
+  if (method === "accept-all") return "granted";
+  if (method === "reject-all") return "denied";
+  return grantedPurposeIds.has(purposeId) ? "granted" : "denied";
+}
+
+function hasSameEffectiveDecisions(
+  current: ConsentRecord,
+  policy: ConsentPolicyInput,
+  decisions: readonly PurposeDecision[],
+  at: number,
+): boolean {
+  if (current.method === "withdrawal") return false;
+  if (
+    !Number.isSafeInteger(current.decidedAt) ||
+    !Number.isSafeInteger(current.expiresAt)
+  ) {
+    return false;
+  }
+  if (current.decidedAt > at || current.expiresAt <= at) return false;
+  if (!sameDecisionSurface(current.policy, policy)) return false;
+  if (current.decisions.length !== decisions.length) return false;
+
+  const currentByPurpose = new Map(
+    current.decisions.map((decision) => [decision.purposeId, decision.value]),
+  );
+  return decisions.every(
+    (decision) => currentByPurpose.get(decision.purposeId) === decision.value,
+  );
+}
+
+/**
+ * Creates a complete explicit purpose decision candidate. Application
+ * orchestration remains responsible for the asymmetric persistence protocol.
+ *
+ * @public
+ */
+export function recordConsentDecision(
+  current: ConsentRecord | undefined,
+  policy: ConsentPolicyInput,
+  command: RecordDecisionCommand,
+): RecordDecisionResult {
+  let currentRecord: ConsentRecord | undefined;
+  if (current !== undefined) {
+    const snapshot = snapshotCurrentConsentRecord(current);
+    if (!snapshot.ok) {
+      return Object.freeze({
+        issues: freezeIssues([
+          {
+            code: "invalid-current-record" as const,
+            path: snapshot.path,
+          },
+        ]),
+        ok: false,
+      });
+    }
+    currentRecord = snapshot.record;
+  }
+
+  const policySnapshot = snapshotConsentPolicyInput(policy);
+  if (!policySnapshot.ok) {
+    return Object.freeze({
+      issues: freezeIssues([
+        {
+          code: "invalid-consent-policy" as const,
+          path: policySnapshot.path,
+        },
+      ]),
+      ok: false,
+    });
+  }
+  const consentPolicy = policySnapshot.policy;
+
+  const capturedCommand = Object.fromEntries(
+    [
+      "consentId",
+      "decidedAt",
+      "expiresAt",
+      "grantedPurposeIds",
+      "locale",
+      "method",
+      "recordId",
+    ].map((field) => [field, captureDataProperty(command, field)]),
+  ) as Record<
+    keyof RecordDecisionCommandBase | "grantedPurposeIds" | "method",
+    ReturnType<typeof captureDataProperty>
+  >;
+
+  const purposeIds = consentPolicy.optionalPurposeIds;
+  const purposeIdSet = new Set(purposeIds);
+  const method = capturedCommand.method?.value;
+  const grantedPurposeSnapshot =
+    method === "granular"
+      ? captureGrantedPurposeIds(capturedCommand.grantedPurposeIds)
+      : { ok: true as const, values: [] };
+  const commandConsentId = capturedCommand.consentId?.value;
+  const consentId: unknown =
+    commandConsentId === undefined
+      ? currentRecord?.consentId
+      : commandConsentId;
+  const commandLocale = capturedCommand.locale?.value;
+  const locale: unknown =
+    commandLocale === undefined ? currentRecord?.locale : commandLocale;
+  const issues: RecordDecisionIssue[] = [];
+  if (
+    capturedCommand.method === undefined ||
+    (method !== "accept-all" &&
+      method !== "granular" &&
+      method !== "reject-all")
+  ) {
+    issues.push({ code: "invalid-decision-method", path: "method" });
+  }
+  const grantedPurposeIds: string[] = [];
+  if (method === "granular" && !grantedPurposeSnapshot.ok) {
+    issues.push({
+      code: "invalid-granted-purpose-set",
+      path: "grantedPurposeIds",
+    });
+  } else if (grantedPurposeSnapshot.ok) {
+    for (let index = 0; index < grantedPurposeSnapshot.values.length; index++) {
+      const purposeId = grantedPurposeSnapshot.values[index];
+      if (typeof purposeId !== "string") {
+        issues.push({
+          code: "invalid-granted-purpose-set",
+          path: "grantedPurposeIds",
+        });
+        break;
+      }
+      grantedPurposeIds.push(purposeId);
+      if (!purposeIdSet.has(purposeId)) {
+        issues.push({
+          code: "unknown-purpose-id",
+          path: `grantedPurposeIds[${String(index)}]`,
+          purposeId,
+        });
+      }
+    }
+  }
+  const recordId: unknown =
+    currentRecord?.recordId ?? capturedCommand.recordId?.value;
+
+  if (
+    capturedCommand.consentId === undefined ||
+    (consentId !== undefined &&
+      (typeof consentId !== "string" || consentId.trim().length === 0))
+  ) {
+    issues.push({ code: "invalid-consent-id", path: "consentId" });
+  }
+  if (
+    capturedCommand.locale === undefined ||
+    (locale !== undefined && typeof locale !== "string")
+  ) {
+    issues.push({ code: "invalid-locale", path: "locale" });
+  }
+
+  const decidedAt = capturedCommand.decidedAt?.value;
+  const expiresAt = capturedCommand.expiresAt?.value;
+  const hasValidDecidedAt =
+    capturedCommand.decidedAt !== undefined &&
+    typeof decidedAt === "number" &&
+    Number.isSafeInteger(decidedAt);
+  const hasValidExpiresAt =
+    capturedCommand.expiresAt !== undefined &&
+    typeof expiresAt === "number" &&
+    Number.isSafeInteger(expiresAt);
+  if (!hasValidDecidedAt) {
+    issues.push({ code: "invalid-timestamp", path: "decidedAt" });
+  }
+  if (!hasValidExpiresAt) {
+    issues.push({ code: "invalid-timestamp", path: "expiresAt" });
+  }
+  if (hasValidDecidedAt && hasValidExpiresAt && expiresAt <= decidedAt) {
+    issues.push({ code: "invalid-decision-interval", path: "expiresAt" });
+  }
+  const currentTransitionAt =
+    currentRecord?.method === "withdrawal"
+      ? currentRecord.withdrawnAt
+      : currentRecord?.decidedAt;
+  if (
+    hasValidDecidedAt &&
+    currentTransitionAt !== undefined &&
+    Number.isSafeInteger(currentTransitionAt) &&
+    decidedAt < currentTransitionAt
+  ) {
+    issues.push({
+      code: "decision-before-current-transition",
+      path: "decidedAt",
+    });
+  }
+
+  if (currentRecord === undefined && capturedCommand.recordId === undefined) {
+    issues.push({ code: "invalid-record-id", path: "recordId" });
+  } else if (
+    recordId === undefined ||
+    (typeof recordId === "string" && recordId.trim().length === 0)
+  ) {
+    issues.push({ code: "missing-record-id", path: "recordId" });
+  } else if (typeof recordId !== "string") {
+    issues.push({ code: "invalid-record-id", path: "recordId" });
+  }
+
+  if (issues.length > 0) {
+    return Object.freeze({ issues: freezeIssues(issues), ok: false });
+  }
+
+  const grantedPurposeIdSet = new Set(grantedPurposeIds);
+  const decisionMethod = method as RecordDecisionCommand["method"];
+  const validDecidedAt = decidedAt as number;
+  const validExpiresAt = expiresAt as number;
+  const decisions: readonly PurposeDecision[] = purposeIds.map((purposeId) => ({
+    purposeId,
+    value: decisionValue(decisionMethod, purposeId, grantedPurposeIdSet),
+  }));
+  if (
+    currentRecord &&
+    hasSameEffectiveDecisions(
+      currentRecord,
+      consentPolicy,
+      decisions,
+      validDecidedAt,
+    )
+  ) {
+    return Object.freeze({
+      ok: true,
+      outcome: "unchanged",
+      record: currentRecord,
+    });
+  }
+
+  const record = freezeConsentRecord({
+    ...(typeof consentId === "string" ? { consentId } : {}),
+    decidedAt: validDecidedAt,
+    decisions,
+    expiresAt: validExpiresAt,
+    ...(typeof locale === "string" ? { locale } : {}),
+    method: decisionMethod,
+    policy: consentPolicy,
+    recordId: typeof recordId === "string" ? recordId : "",
+    revision: (currentRecord?.revision ?? 0) + 1,
+    schemaVersion: CONSENT_RECORD_SCHEMA_VERSION,
+  });
+
+  return Object.freeze({
+    ok: true,
+    outcome: "changed",
+    previousRecord: currentRecord ?? null,
+    record,
+  });
+}

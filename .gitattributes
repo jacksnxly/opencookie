@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+*.tgz binary
+
+pnpm-lock.yaml linguist-generated=true
+**/pnpm-lock.yaml linguist-generated=true
+packages/**/etc/*.api.md linguist-generated=true

@@ -1,0 +1,64 @@
+---
+title: GPC and Consent Mode v2
+description: Preserve privacy signals and broadcast denied defaults before updates.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+## Keep GPC separate from consent
+
+Global Privacy Control is an observed privacy signal. It is not a universal replacement for every consent decision. Resolve server and browser observations for the same navigation, then map the enabled signal through an operator-owned jurisdiction policy.
+
+The W3C draft defines the request signal as `Sec-GPC` with the exact value `1`. A server should compare the raw header exactly and render an explicit `enabled` or `absent` observation into the page. Browser code can separately read `navigator.globalPrivacyControl`; it cannot prove which header reached the server.
+
+<RunnableSample id="gpc-resolution" title="gpc-policy.ts" />
+
+The restriction result blocks configured purposes, services, or resources without rewriting the visitor's explicit consent record.
+
+The programmatic bootstrap can read the browser signal itself. Pass `globalPrivacyControl` with a `purposeIds` list to `bootstrapOpenCookie` or `bootstrapOpenCookieFromHead`, for example `bootstrapOpenCookie({ document, globalPrivacyControl: { purposeIds: ["analytics"] } })`. At startup it reads `navigator.globalPrivacyControl` on the document's window once. When that value is exactly `true`, the named purposes are restricted through the same resolution the rest of OpenCookie uses. `false`, or a browser that does not expose the signal, restricts nothing. The signal does not record a decision and does not grant a purpose.
+
+`purposeIds` must be a non-empty list of non-blank ids, and each id must be a purpose of the policy. Passing `globalPrivacyControl` together with `privacyRestrictions` is refused, as is an empty list or a purpose id the policy does not have, before anything is mounted. This option is not an attribute of the drop-in. The drop-in still uses `data-oc-gpc-purpose-id`.
+
+For the classic-script bootstrap, render `data-oc-server-gpc="enabled"` only after the server observed exact `Sec-GPC: 1`, otherwise render `data-oc-server-gpc="absent"`. Add `data-oc-gpc-purpose-id` to select the purpose that the enabled signal restricts. OpenCookie does not infer a server request header from client JavaScript. OpenCookie is a technical tool, not legal advice: a privacy signal is not a determination that a purpose is lawful.
+
+<Aside type="caution" title="Label synthetic browser evidence">
+A synthetic test can override `navigator.globalPrivacyControl` before page code runs, but that exercises only the browser observation path. It does not prove that the user agent sent `Sec-GPC: 1`. Test the server path independently with an actual request header and assert the server-rendered observation.
+</Aside>
+
+## Keep Basic mode as the default
+
+`bootstrapOpenCookie()` establishes one denied default synchronously before it initializes storage. It needs the body, so it cannot run before a tag manager's inline snippet in `<head>`. From `<head>`, call `bootstrapOpenCookieFromHead()` with the same options instead: it sends the denied default in the calling task, before any later script, and resolves with the bootstrap once the document is parsed. Define `gtag` before calling it. A restored decision's update follows once the page is parsed. In Basic mode the optional Google tags stay blocked until then; in Advanced mode, tags that run earlier see the denied default unless `waitForUpdateMs` makes them wait. A restored record sends its update before resource reconciliation. A new decision also broadcasts its update before declared resources are activated or re-blocked. Calling `withdrawConsent()` sends a denied update, then re-blocks optional resources. `googleConsentMode.command` is required: pass the function that forwards each call to Google's tag, usually `command: (...args) => gtag(...args)`, with `gtag` defined first.
+
+In Basic mode, optional Google tags remain blocked until affirmative consent. The local `gtag` command queue can exist before the external Google tag loads, which preserves the required denied default followed by update order without making a pre-consent network request.
+
+<RunnableSample id="consent-mode" title="consent-mode.ts" />
+
+### A tag manager's container
+
+A container that loads for any of several purposes says nothing about which one is permitted, so map the signals to purposes instead of resources. `purposeMapping` grants a signal while every purpose mapped to it is permitted. Give exactly one of `mapping` and `purposeMapping`. A signal mapped by resource to a container that matches any is refused before anything is sent, since it would be granted for every purpose.
+
+<RunnableSample id="tag-manager" title="tag-manager.ts" />
+
+Start it from `<head>`, before the tag manager's own snippet, so the denied default comes first. The tags inside the container read the signals; configure each tag's own consent check, and test what it sends before and after each decision.
+
+### With the drop-in
+
+The one-line drop-in reads Consent Mode from attributes on its own `<script>` tag:
+
+- `data-oc-google-consent-mode="basic"` or `"advanced"` turns it on.
+- `data-oc-google-analytics-resource`, `data-oc-google-ad-storage-resource`, `data-oc-google-ad-user-data-resource` and `data-oc-google-ad-personalization-resource` each name one declared resource (its `data-oc-resource` id). The matching signal is granted only while that resource is allowed.
+
+The page must define `gtag` before the drop-in runs, usually with the standard inline `window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);}`. The drop-in sends the denied default in its own script task, before it builds anything else, so it precedes any later script, even from `<head>`, where it mounts once the body exists. Place the drop-in's tag before the Google tag and before any script that sends measurement commands; deferred scripts run in document order. The drop-in refuses to start, and logs why, when a mode is set but `gtag` is missing, when a mode is neither `basic` nor `advanced`, or when a resource mapping is given without a mode.
+
+<Aside type="caution" title="Advanced mode changes network behavior">
+[Google documents](https://developers.google.com/tag-platform/security/concepts/consent-mode) that Advanced Consent Mode loads Google tags before a choice and can send cookieless pings while consent is denied. Enable `mode: "advanced"` only as a deliberate operator decision after reviewing that pre-consent behavior. The verified sample above stays in Basic mode.
+</Aside>
+
+<Aside type="caution" title="Signals are projections">
+Outbound platform flags do not decide your lawful basis or prove that a vendor respected the signal. Test real network behavior before and after each decision.
+</Aside>
+
+## Primary references
+
+Accessed 2026-08-22: [Google's implementation guide](https://developers.google.com/tag-platform/security/guides/consent) requires defaults before measurement commands and updates when a choice changes; [Google's Basic and Advanced comparison](https://developers.google.com/tag-platform/security/concepts/consent-mode) describes their different network behavior; and the [W3C GPC Working Draft](https://www.w3.org/TR/gpc/) defines the HTTP field and browser property. The GPC document is a Working Draft, so treat it as versioned input rather than a finished Recommendation.

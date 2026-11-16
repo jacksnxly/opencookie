@@ -1,0 +1,202 @@
+import type {
+  DecisionReader,
+  DecisionStoreReadResult,
+  PersistedConsentState,
+  PersistedDecisionRecord,
+} from "../runtime/initialize-consent.js";
+import { persistedConsentStatesEqual } from "../runtime/persisted-consent-record.js";
+
+/** @public */
+export type DecisionStoreWriteResult =
+  | { readonly status: "conflict" }
+  | { readonly status: "readback-mismatch" }
+  | { readonly status: "written" };
+
+/** @public */
+export type DecisionStoreConditionalClearResult =
+  "cleared" | "conflict" | "readback-mismatch";
+
+/**
+ * Store methods are non-reentrant persistence operations. While one of these
+ * promises is pending, an adapter must not call and await a command on the
+ * same `OpenCookie` instance. Runtime command completion may itself be waiting
+ * for the store operation, so that callback cycle cannot settle.
+ *
+ * @public
+ */
+export interface DecisionStore extends DecisionReader {
+  /**
+   * Removes any durable decision. A resolved promise means a subsequent read
+   * cannot restore the removed record.
+   */
+  readonly clear: () => Promise<void>;
+  /**
+   * Attempts to remove the exact supplied record. `conflict` means a different
+   * valid record was observed; `readback-mismatch` means the adapter cannot
+   * prove the outcome. Only an atomic backend can exclude a writer racing
+   * between a browser adapter's precondition check and deletion.
+   */
+  readonly clearIfCurrent: (
+    expected: PersistedConsentState,
+  ) => Promise<DecisionStoreConditionalClearResult>;
+  readonly compareAndSet: (
+    expected: PersistedConsentState | null,
+    candidate: PersistedConsentState,
+  ) => Promise<DecisionStoreWriteResult>;
+}
+
+/** @public */
+export type GrantPersistenceDiagnostic =
+  | { readonly code: "grant-clear-conflict" }
+  | { readonly code: "grant-clear-failed" }
+  | { readonly code: "grant-clear-unconfirmed" }
+  | { readonly code: "grant-readback-invalid" }
+  | { readonly code: "grant-readback-mismatch" }
+  | { readonly code: "grant-readback-missing" }
+  | { readonly code: "grant-write-conflict" }
+  | { readonly code: "grant-write-failed" };
+
+/** @public */
+export type GrantPersistenceResult =
+  | {
+      readonly diagnostics: readonly GrantPersistenceDiagnostic[];
+      readonly outcome: "grant-persistence-unconfirmed";
+    }
+  | {
+      readonly outcome: "confirmed";
+      readonly record: PersistedDecisionRecord;
+    };
+
+export function decisionRecordsEqual(
+  expected: PersistedDecisionRecord,
+  actual: PersistedDecisionRecord,
+): boolean {
+  return persistedConsentStatesEqual({ record: expected }, { record: actual });
+}
+
+export function decisionStorePreconditionFailure(
+  current: DecisionStoreReadResult,
+  expected: PersistedConsentState | null,
+): "conflict" | "readback-mismatch" | undefined {
+  if (current.status === "stored") {
+    return expected && persistedConsentStatesEqual(current.state, expected)
+      ? undefined
+      : "conflict";
+  }
+  return current.status === "missing" && !expected
+    ? undefined
+    : "readback-mismatch";
+}
+
+export function decisionStoreClearPrecondition(
+  current: DecisionStoreReadResult,
+  expected: PersistedConsentState,
+): DecisionStoreConditionalClearResult | undefined {
+  if (current.status === "missing") return "cleared";
+  if (current.status !== "stored") return "readback-mismatch";
+  return persistedConsentStatesEqual(current.state, expected)
+    ? undefined
+    : "conflict";
+}
+
+function activeState(record: PersistedDecisionRecord): PersistedConsentState {
+  return { record };
+}
+
+export async function clearUnconfirmedWrite(
+  store: DecisionStore,
+  expected: PersistedDecisionRecord | null,
+  candidate: PersistedDecisionRecord,
+): Promise<DecisionStoreConditionalClearResult> {
+  const status = await store.clearIfCurrent(activeState(candidate));
+  return status !== "cleared" && expected
+    ? store.clearIfCurrent(activeState(expected))
+    : status;
+}
+
+async function rejectUnconfirmedGrant(
+  store: DecisionStore,
+  expected: PersistedDecisionRecord | null,
+  candidate: PersistedDecisionRecord,
+  diagnostic: GrantPersistenceDiagnostic,
+): Promise<GrantPersistenceResult> {
+  const diagnostics: GrantPersistenceDiagnostic[] = [diagnostic];
+  let cleanupStatus: DecisionStoreConditionalClearResult | undefined;
+  try {
+    cleanupStatus = await clearUnconfirmedWrite(store, expected, candidate);
+  } catch {
+    diagnostics.push({ code: "grant-clear-failed" });
+  }
+  if (cleanupStatus === "conflict") {
+    diagnostics.push({ code: "grant-clear-conflict" });
+  } else if (cleanupStatus === "readback-mismatch") {
+    diagnostics.push({ code: "grant-clear-unconfirmed" });
+  }
+
+  return {
+    diagnostics: Object.freeze(diagnostics),
+    outcome: "grant-persistence-unconfirmed",
+  };
+}
+
+/** @public */
+export async function persistGrant(
+  store: DecisionStore,
+  expected: PersistedDecisionRecord | null,
+  candidate: PersistedDecisionRecord,
+): Promise<GrantPersistenceResult> {
+  if (expected && expected.recordId !== candidate.recordId) {
+    return {
+      diagnostics: [{ code: "grant-write-conflict" }],
+      outcome: "grant-persistence-unconfirmed",
+    };
+  }
+  try {
+    const candidateState = activeState(candidate);
+    const writeResult = await store.compareAndSet(
+      expected ? activeState(expected) : null,
+      candidateState,
+    );
+    if (writeResult.status === "conflict") {
+      return {
+        diagnostics: [{ code: "grant-write-conflict" }],
+        outcome: "grant-persistence-unconfirmed",
+      };
+    }
+    if (writeResult.status === "readback-mismatch") {
+      return await rejectUnconfirmedGrant(store, expected, candidate, {
+        code: "grant-readback-mismatch",
+      });
+    }
+  } catch {
+    return rejectUnconfirmedGrant(store, expected, candidate, {
+      code: "grant-write-failed",
+    });
+  }
+
+  let readback: DecisionStoreReadResult;
+  try {
+    readback = await store.read();
+  } catch {
+    return rejectUnconfirmedGrant(store, expected, candidate, {
+      code: "grant-readback-invalid",
+    });
+  }
+  if (readback.status === "missing") {
+    return rejectUnconfirmedGrant(store, expected, candidate, {
+      code: "grant-readback-missing",
+    });
+  }
+  if (readback.status !== "stored") {
+    return rejectUnconfirmedGrant(store, expected, candidate, {
+      code: "grant-readback-invalid",
+    });
+  }
+  if (!persistedConsentStatesEqual(activeState(candidate), readback.state)) {
+    return rejectUnconfirmedGrant(store, expected, candidate, {
+      code: "grant-readback-mismatch",
+    });
+  }
+
+  return { outcome: "confirmed", record: candidate };
+}

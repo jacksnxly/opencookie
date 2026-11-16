@@ -1,0 +1,22 @@
+**/node_modules/
+**/dist/
+**/coverage/
+**/.astro/
+**/.next/
+**/.nuxt/
+**/.output/
+**/.svelte-kit/
+.cache/
+.pnpm-store/
+.stryker-tmp/
+artifacts/
+fixtures/sveltekit/build/
+packages/**/temp/
+playwright-report/
+reports/
+test-results/
+pnpm-lock.yaml
+# Local tool folders at the repository root; .github is product configuration.
+/.*/
+!/.github/
+!/.changeset/

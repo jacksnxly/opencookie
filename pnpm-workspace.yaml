@@ -1,0 +1,35 @@
+packages:
+  - packages/*
+  - packages/adapters/*
+  - apps/*
+  - fixtures/*
+
+allowBuilds:
+  esbuild: true
+  unrs-resolver@1.12.2: false
+
+linkWorkspacePackages: false
+overrides:
+  "cookie@0.6.0": 0.7.2
+  "fast-uri@>=3.0.0 <3.1.7": 3.1.7
+  "qs@>=6.0.0 <6.16.0": 6.16.0
+  "srvx@0.10.1": 0.11.22
+minimumReleaseAgeExclude:
+  - "@microsoft/api-extractor@7.59.0"
+  - eslint@10.9.0
+  - "@next/env@16.3.2"
+  - "@next/swc-darwin-arm64@16.3.2"
+  - "@next/swc-darwin-x64@16.3.2"
+  - "@next/swc-linux-arm64-gnu@16.3.2"
+  - "@next/swc-linux-arm64-musl@16.3.2"
+  - "@next/swc-linux-x64-gnu@16.3.2"
+  - "@next/swc-linux-x64-musl@16.3.2"
+  - "@next/swc-win32-arm64-msvc@16.3.2"
+  - "@next/swc-win32-x64-msvc@16.3.2"
+  - next@16.3.2
+  - "@vue/language-core@3.3.11"
+  - vue-tsc@3.3.11
+  - "@next/eslint-plugin-next@16.3.2"
+  - eslint-config-next@16.3.2
+preferWorkspacePackages: false
+saveWorkspaceProtocol: rolling

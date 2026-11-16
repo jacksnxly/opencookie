@@ -1,0 +1,20 @@
+{
+  "fixture": "react-vite",
+  "generator": "create-vite",
+  "generatorVersion": "9.1.2",
+  "template": "react-ts",
+  "command": "pnpm dlx create-vite@9.1.2 fixtures/react-vite --template react-ts --no-interactive",
+  "scaffoldedAt": "2026-08-22",
+  "sources": [
+    "https://vite.dev/guide/",
+    "https://react.dev/learn/add-react-to-an-existing-project"
+  ],
+  "sourceAccessedAt": "2026-08-22",
+  "resolvedVersions": {
+    "@vitejs/plugin-react": "6.1.0",
+    "create-vite": "9.1.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "vite": "8.2.2"
+  }
+}

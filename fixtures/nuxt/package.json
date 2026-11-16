@@ -1,0 +1,29 @@
+{
+  "name": "@opencookie-fixtures/nuxt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node node_modules/@nuxt/cli/bin/nuxi.mjs build",
+    "dev": "node node_modules/@nuxt/cli/bin/nuxi.mjs dev",
+    "generate:types": "node node_modules/@nuxt/cli/bin/nuxi.mjs prepare",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@opencookie-dev/core": "workspace:*",
+    "@opencookie-dev/nuxt": "workspace:*",
+    "@opencookie-dev/vanilla": "workspace:*",
+    "nuxt": "4.5.2",
+    "vue": "3.5.41",
+    "vue-router": "5.3.1"
+  },
+  "devDependencies": {
+    "@nuxt/cli": "3.37.0"
+  },
+  "opencookieFixtureSources": [
+    "nuxt.config.ts",
+    "app/app.vue",
+    "opencookie-store.ts",
+    "fixture-client.ts"
+  ]
+}

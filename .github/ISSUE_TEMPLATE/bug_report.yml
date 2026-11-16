@@ -1,0 +1,49 @@
+name: Bug report
+description: Something in OpenCookie does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security issues go through SECURITY.md, not here.
+  - type: input
+    id: packages
+    attributes:
+      label: Packages and versions
+      description: For example `@opencookie-dev/vanilla@0.4.0`, `@opencookie-dev/next@0.2.1`.
+    validations:
+      required: true
+  - type: dropdown
+    id: stack
+    attributes:
+      label: Stack
+      options:
+        - Plain HTML or a classic script
+        - React with Vite
+        - Vue with Vite
+        - SvelteKit
+        - Next.js App Router
+        - Next.js Pages Router
+        - Nuxt
+        - Astro
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Firefox 147, Safari 26.1, Chrome 141
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest page, policy or commands that show the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected and what happened
+    validations:
+      required: true

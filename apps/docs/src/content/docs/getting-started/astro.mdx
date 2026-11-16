@@ -1,0 +1,48 @@
+---
+title: Astro
+description: Inject an application-owned OpenCookie client without forcing a framework island.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+## Verified fresh-app workflow
+
+Create an empty directory, enter it, then run these exact commands in order. pnpm 11 rejects unreviewed dependency build scripts. Because this workflow separates scaffolding from installation, create the same narrow [`esbuild` and `sharp` allowlist](https://github.com/withastro/astro/pull/17205) that `create-astro` uses for its [pnpm install path](https://github.com/withastro/astro/blob/create-astro%405.2.3/packages/create-astro/src/actions/dependencies.ts).
+
+- Scaffold: `pnpm dlx create-astro@5.2.3 . --template minimal --no-install --no-git --no-ai --skip-houston --yes`
+- Approve builds: `node --input-type=module --eval 'import { writeFile } from "node:fs/promises"; await writeFile("pnpm-workspace.yaml", Buffer.from("YWxsb3dCdWlsZHM6CiAgImVzYnVpbGQiOiB0cnVlCiAgInNoYXJwIjogdHJ1ZQo=", "base64"), { flag: "wx" });'`
+- Install: `pnpm install --no-frozen-lockfile`
+- Initialize: `npx --yes opencookie@0.4.1 init --yes`
+- Build: `pnpm build`
+- Serve: `pnpm preview --host 127.0.0.1 --port 4173`
+
+Open `http://127.0.0.1:4173/` to inspect the production build and its initialized banner.
+
+Observed output: Astro generated one static page, the production build exited 0, and preview returned HTTP 200.
+
+## Browser-verified result
+
+This exact production workflow was exercised from a clean storage state in a real browser. Before consent, `opencookie-demo.js` had zero requests and zero executions. Accept all persisted across a new navigation. Analytics was then denied with Save choices, consent was withdrawn, and a final navigation again produced zero demo requests and executions.
+
+The first two images below are current-surface captures from the corresponding rebuilt repository production fixture. They are separate from the fresh-app run described above.
+
+![Astro consent banner before consent](/images/getting-started/astro/banner-preconsent.png)
+
+![Astro settings panel showing the optional category checkbox and Analytics purpose checkbox](/images/getting-started/astro/preferences-open.png)
+
+![Astro after withdrawal and a fresh navigation](/images/getting-started/astro/withdrawal-reload-blocked.png)
+
+<Steps>
+1. Run the pinned unattended initializer in the Astro project.
+   The initializer installs `@opencookie-dev/core`, `@opencookie-dev/astro`, and `@opencookie-dev/vanilla`.
+2. Review the integration that the initializer adds to `astro.config.mjs`. It points at the generated browser entrypoint.
+
+   <RunnableSample id="astro" title="astro.config.mjs" />
+
+3. Keep the default `page` stage unless denied defaults or blocking must run before hydrated islands.
+</Steps>
+
+Static pages do not need a framework island for the consent runtime. `createAstroServerBinding` reads the deterministic server snapshot without subscribing or touching browser globals.
+
+Follow [pre-consent blocking](/recipes/pre-consent-blocking/) for scripts declared directly in Astro templates.

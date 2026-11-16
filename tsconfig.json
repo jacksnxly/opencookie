@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/cli" },
+    { "path": "./packages/adapters/astro" },
+    { "path": "./packages/core" },
+    { "path": "./packages/adapters/next" },
+    { "path": "./packages/adapters/react" },
+    { "path": "./packages/adapters/nuxt" },
+    { "path": "./packages/adapters/svelte" },
+    { "path": "./packages/adapters/vanilla" },
+    { "path": "./packages/adapters/vue" }
+  ]
+}

@@ -1,0 +1,51 @@
+---
+title: Plain HTML without a build
+description: Serve several purposes and your own language from static HTML, using an import map instead of a bundler.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import RunnableSample from "../../../components/RunnableSample.astro";
+
+The one-line drop-in is the fastest way to start, and it is deliberately small:
+it carries a single purpose and its English copy. A site that needs several
+purposes, or a banner in another language, does not need a bundler to get them.
+Browsers resolve bare module specifiers through an
+[import map](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/script/type/importmap),
+so static HTML can load the same modules a bundled application does.
+
+Copy the two packages into the site, map the four specifiers, and mount:
+
+<RunnableSample
+  id="no-build-modules"
+  lang="html"
+  title="index.html"
+  display="template"
+/>
+
+The page reads the policy you published. `opencookie policy starter` writes
+that document and `opencookie policy publish` records it, so serving
+`opencookie/policy.json` beside the page keeps the banner and the published
+policy the same thing. Nothing here is compiled: it is the same module the
+bundled routes import, loaded directly.
+
+What this route gives you that the drop-in does not:
+
+- **Every purpose your policy defines.** The preferences surface lists them all,
+  each with its own label and disclosure.
+- **Any language.** Pass `VANILLA_COPY_DE` for German, or your own strings for
+  another language. No copy is bundled that your visitors will not read.
+- **The full programmatic API**, including custom resource controllers and a
+  server-backed decision store.
+
+<Aside type="caution">
+  An import map cannot carry an `integrity` attribute, so a module loaded
+  through one is not pinned the way the drop-in's `integrity` pin is. Serve
+  these files from your own origin rather than a public CDN, and they are
+  covered by the same deployment you already control.
+</Aside>
+
+<Aside type="note">
+  The four specifiers must all be mapped. `@opencookie-dev/vanilla` imports
+  `@opencookie-dev/core` and two of its subpaths, and a browser resolves each one
+  through the map.
+</Aside>

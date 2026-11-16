@@ -1,0 +1,20 @@
+{
+  "fixture": "vue-vite",
+  "generator": "create-vite",
+  "generatorVersion": "9.1.2",
+  "template": "vue-ts",
+  "command": "pnpm dlx create-vite@9.1.2 fixtures/vue-vite --template vue-ts --no-interactive",
+  "scaffoldedAt": "2026-08-22",
+  "sources": [
+    "https://vite.dev/guide/",
+    "https://vuejs.org/guide/quick-start.html"
+  ],
+  "sourceAccessedAt": "2026-08-22",
+  "resolvedVersions": {
+    "@vitejs/plugin-vue": "6.0.8",
+    "create-vite": "9.1.2",
+    "vite": "8.2.2",
+    "vue": "3.5.41",
+    "vue-tsc": "3.3.11"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "fixture": "sveltekit",
+  "framework": "sveltekit",
+  "frameworkVersion": "2.70.3",
+  "generator": "sv",
+  "generatorVersion": "0.17.0",
+  "scaffoldedAt": "2026-08-22",
+  "command": "pnpm dlx sv@0.17.0 create fixtures/sveltekit --template minimal --types ts --no-add-ons --no-install",
+  "sources": [
+    "https://svelte.dev/docs/kit/creating-a-project",
+    "https://svelte.dev/docs/kit/adapter-node",
+    "https://svelte.dev/docs/kit/configuration#csp"
+  ]
+}

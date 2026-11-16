@@ -1,0 +1,93 @@
+---
+import type { OpenCookieExternalStore } from "@opencookie-dev/core";
+import { createAstroServerBinding } from "@opencookie-dev/astro";
+import { ClientRouter } from "astro:transitions";
+
+interface Props {
+  pathname: string;
+}
+
+const { pathname } = Astro.props;
+const routeMatch = /^\/spa\/(\d+)$/u.exec(pathname);
+const routeSequence =
+  routeMatch === null ? 0 : Number.parseInt(routeMatch[1] ?? "0", 10);
+const nextRoute = `/spa/${String(routeSequence + 1)}`;
+const serverSnapshot = Object.freeze({ readiness: "uninitialized" as const });
+const serverStore: OpenCookieExternalStore<typeof serverSnapshot> = {
+  getServerSnapshot: () => serverSnapshot,
+  getSnapshot: () => serverSnapshot,
+  subscribe: () => () => undefined,
+};
+const serverBinding = createAstroServerBinding(serverStore);
+const analyticsResource =
+  routeSequence === 0 ? "initial" : `dynamic-${String(routeSequence)}`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta data-oc-csp data-astro-transition-persist="opencookie-csp" />
+    <title>OpenCookie Astro fixture</title>
+    <ClientRouter fallback="swap" />
+    <script is:inline defer nonce="fixture-nonce" src="/essential.js"></script>
+    <script
+      is:inline
+      type="text/plain"
+      nonce="fixture-nonce"
+      data-oc-resource="analytics-script"
+      data-oc-category="analytics"
+      data-src={`http://tracker.astro.opencookie.test:4400/analytics.js?resource=${analyticsResource}`}
+    ></script>
+  </head>
+  <body>
+    <div data-fixture-root="astro" data-ssr-fixture="astro">
+      <header class="site-header">
+        <a class="brand" href="/">OpenCookie Astro fixture</a>
+        <a id="route-control" data-testid="route-control" href={nextRoute}>
+          Open dynamic route
+        </a>
+      </header>
+      <main id="content-sentinel" data-testid="content-sentinel">
+        <p class="eyebrow">Astro SSR production fixture</p>
+        <h1>Consent behavior should survive real application navigation.</h1>
+        <p>
+          This page uses the Astro server binding and a page-level OpenCookie
+          browser entrypoint on routes with no framework island.
+        </p>
+        <dl class="status-grid">
+          <div>
+            <dt>Route</dt>
+            <dd>
+              <output id="fixture-status" data-testid="fixture-status">
+                {routeSequence === 0
+                  ? "Initial route"
+                  : `Dynamic route ${String(routeSequence)}`}
+              </output>
+            </dd>
+          </div>
+          <div>
+            <dt>Consent</dt>
+            <dd data-testid="consent-status">pending</dd>
+          </div>
+        </dl>
+        <template
+          data-oc-iframe
+          title="Optional product video"
+          data-oc-resource="product-video"
+          data-oc-category="analytics"
+          data-src="http://tracker.astro.opencookie.test:4400/frame"
+        ></template>
+        <output hidden data-ssr-readiness={serverBinding.snapshot.readiness}>
+          {serverBinding.snapshot.readiness}
+        </output>
+      </main>
+    </div>
+  </body>
+</html>
+
+<style is:global>
+  :root{font-family:ui-sans-serif,system-ui,sans-serif;color:#171912;background:#f4f1e8;color-scheme:light dark}*{box-sizing:border-box}body{margin:0;min-height:100vh}.site-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 5vw;border-bottom:2px solid currentColor}.brand{font-weight:800;color:inherit}#route-control{min-height:2.75rem;display:inline-flex;align-items:center;border:2px solid currentColor;padding:.5rem .8rem;color:inherit;font-weight:700}main{width:min(70rem,90vw);margin:8vh auto}.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-weight:800}h1{max-width:17ch;font-family:Georgia,serif;font-size:clamp(2.5rem,7vw,5.5rem);line-height:.95}.status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.status-grid div{border:2px solid currentColor;padding:1rem}.status-grid dt{font-size:.75rem;text-transform:uppercase;letter-spacing:.1em}.status-grid dd{margin:.35rem 0 0;font-weight:800}@media(prefers-color-scheme:dark){:root{color:#f4f1e8;background:#171912}}@media(max-width:36rem){.site-header{align-items:flex-start;flex-direction:column}.status-grid{grid-template-columns:1fr}}
+</style>

@@ -1,0 +1,62 @@
+{
+  "name": "@opencookie-dev/next",
+  "version": "0.2.1",
+  "description": "Next.js client boundary for the OpenCookie React binding",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jacksnxly/opencookie.git",
+    "directory": "packages/adapters/next"
+  },
+  "homepage": "https://opencookie.dev",
+  "bugs": {
+    "url": "https://github.com/jacksnxly/opencookie/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown"
+  },
+  "dependencies": {
+    "@opencookie-dev/react": "workspace:^"
+  },
+  "peerDependencies": {
+    "next": ">=15.0.0 <17.0.0",
+    "react": ">=18.3.0 <20.0.0",
+    "react-dom": ">=18.3.0 <20.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

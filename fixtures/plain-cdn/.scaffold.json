@@ -1,0 +1,8 @@
+{
+  "fixture": "plain-cdn",
+  "generator": "manual-minimal-html",
+  "generatorVersion": "HTML Living Standard 2026-08-22 snapshot",
+  "command": "Create a minimal standards-based HTML document without a build tool",
+  "scaffoldedAt": "2026-08-22",
+  "standard": "WHATWG HTML Living Standard"
+}

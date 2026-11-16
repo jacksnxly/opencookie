@@ -1,0 +1,30 @@
+---
+import { createAstroServerBinding } from "../../../dist/index.js";
+
+const binding = createAstroServerBinding({
+  getServerSnapshot: () => ({ state: "server" as const }),
+  getSnapshot: () => {
+    throw new Error("The Astro server render must not read a client snapshot.");
+  },
+  subscribe: () => {
+    throw new Error("The Astro server render must not subscribe.");
+  },
+});
+---
+
+<!doctype html>
+<html
+  lang="en"
+  data-oc-framework={binding.framework}
+  data-oc-interactive={String(binding.interactive)}
+  data-oc-state={binding.snapshot.state}
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>OpenCookie Astro build fixture</title>
+  </head>
+  <body>
+    <main>Server-rendered consent state</main>
+  </body>
+</html>

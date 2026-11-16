@@ -1,0 +1,92 @@
+---
+title: Testing consent state
+description: Create deterministic consent decisions without clicking through unrelated setup.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+Drive the same public client methods that production uses. A test helper may create an isolated in-memory store, but it should not patch internal state or invent a different record shape.
+
+<RunnableSample id="test-state" title="test-consent.ts" />
+
+<Steps>
+1. Give each test a fresh store and deterministic clock and ID generator.
+2. Initialize, then call `acceptAll`, `rejectAll`, or `savePreferences`.
+3. Assert the stored record, effective access, broadcaster calls, and rendered state.
+4. Reload or recreate the application to prove restoration instead of checking only the in-memory snapshot. In a browser test, reloading the same page proves restoration within one session. Proving it across sessions needs storage that outlives the browser context: Playwright Test's default context is discarded when the test process ends, so a decision written in one run is gone in the next and persistence appears to fail. Use `chromium.launchPersistentContext` with a user data directory you control when you want that cross-session proof.
+5. Advance the injected clock past `expiresAt`, call `refresh()` on the same client, and prove the expired snapshot publishes blocked effective access before browser controllers reconcile it.
+</Steps>
+
+Browser tests should also cover withdrawal, live expiry, storage loss, GPC, route transitions, and newly inserted blocked nodes. For policy changes, seed a record under a previous verified snapshot and construct the next generic client with current-inclusive history. Assert that affected grants become unresolved, unaffected decisions carry forward, malformed or missing history fails closed, and the current-only auto path remains conservative.
+
+Use the [decision lifecycle recipe](/recipes/decision-lifecycle/) to distinguish live expiry from withdrawal and policy-identity re-consent.
+
+## Browser test contract
+
+A browser test needs three things the programmatic client does not expose: how to find the consent surfaces, what their controls are called, and where the decision is stored. These are the shipped defaults, so a test written against them works before you customise anything.
+
+The unresolved first-visit surface is a non-modal `.oc-bar`. Settings opens a separate persistent `dialog.oc-panel` with its accessible name taken from the visible title. After a decision, the bar is absent and the closed panel remains alongside the Privacy choices launcher.
+
+| What you need | Default | How to change it |
+| --- | --- | --- |
+| First-visit bar | `.oc-bar` with `aria-labelledby` and `aria-describedby` | not configurable |
+| Settings panel | `dialog.oc-panel`, modal only while open | not configurable |
+| Accessible name | `Your choices, clearly.` | `copy.title` |
+| Accept control | `Accept all` | `copy.acceptAll` |
+| Reject control | `Reject all` | `copy.rejectAll` |
+| Open settings control | `Settings` | `copy.manage` |
+| Category choice | `input[name="opencookie-category"][value="<category-id>"]` | policy category ID |
+| Purpose choice | `input[name="opencookie-purpose"][value="<purpose-id>"]` | policy purpose ID |
+| Save control | `Save choices` | `copy.save` |
+| Withdraw control | `Withdraw consent` | `copy.withdrawConsent` |
+| Dismiss control | `Close preferences` | `copy.close` |
+| Reopen control | `Privacy choices` | `copy.open` |
+
+A category checkbox represents the exact transitive expansion of that category, not merely the purposes displayed in its section. It is checked when every expanded purpose is selected and indeterminate when only part of that set is selected. OpenCookie derives all category states in one shared policy-DAG pass. Each category interaction expands that category once, then applies one batch dependency-completion or dependency-pruning operation. A flat or trailing ungrouped section has purpose choices but no `opencookie-category` input.
+
+The decision is persisted under a single key. Web Storage is the default; the cookie transport uses its own key.
+
+| Transport | Default key | How to change it |
+| --- | --- | --- |
+| Web Storage | `opencookie.consent` | `storageKey`, or `data-oc-storage-key` on the CDN tag |
+| Cookie | `opencookie-consent` | `data-oc-storage-key` with `data-oc-storage="cookie"` |
+
+The `oc_consent` and `site_consent` values shown in the CDN and subdomain recipes are custom overrides chosen to illustrate the attribute. They are not the defaults.
+
+A minimal end-to-end check is therefore: load the page, assert `.oc-bar` is visible, open Settings, select the `optional` category, assert the Analytics purpose becomes selected, save, assert the storage key is populated and the gated resource runs, reload, and assert the decision and resource state persist. Reopen the panel, deselect the category, save, reload, and prove the resource is blocked. Do not assert that every dialog node is detached because the settings panel is deliberately persistent and closed while dormant.
+
+## Test storage failures as visible product states
+
+Do not stop at the happy path. The [Web Storage standard](https://html.spec.whatwg.org/multipage/webstorage.html#the-storage-interface) allows access to fail because of browser policy and requires `setItem()` to throw `QuotaExceededError` when a value cannot be stored. OpenCookie does not activate a new optional grant until persistence and immediate readback both succeed. A failed save keeps the grant pending, keeps additional optional resources blocked, exposes a `role="alert"` message, and offers `Try saving again`.
+
+Use one deterministic case for each failure boundary:
+
+| Condition                                           | Test injection                                                                                   | Required observation                                                                                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `window.localStorage` access throws `SecurityError` | Install the failing getter before application scripts run                                        | The choice remains pending, the alert is visible, and no additional optional resource activates. Restore access, activate `Try saving again`, and prove persistence before activation.          |
+| `Storage.getItem()` throws                          | Return a storage handle whose read method fails                                                  | The failure is treated as unknown, never as an empty store. A previously stored decision must not be overwritten.                                                                               |
+| `Storage.setItem()` throws `QuotaExceededError`     | Throw before changing the stored value                                                           | The settings panel or persistent notice reports the failure. Reload still behaves from the last confirmed record. Retry succeeds only after readback confirms the new record.                    |
+| Cookie assignment is ignored                        | Discard the cookie write without throwing                                                        | Immediate readback detects the suppression. The new grant remains pending and blocked instead of looking saved.                                                                                 |
+| Private or ephemeral session ends                   | Accept and reload in context A, then close it and create context B                               | Persistence works within context A. Context B starts without the prior decision. Do not describe this as durable consent storage.                                                               |
+| Cross-site embedding blocks or partitions storage   | Load the consent surface below a different top-level site with the target browser policy enabled | A blocked write cannot report success or activate optional resources. Prefer a first-party top-level consent surface unless the deployment has a separately reviewed cross-site storage design. |
+
+### Prove Safari policy with Safari
+
+Playwright's browser engines remain the automated regression net. To make a Safari-specific claim from a source checkout, run `pnpm build`, then start the loopback-only manual harness with `pnpm e2e:storage:safari:serve -- --run-id safari-manual`.
+
+Open the printed `http://localhost:4760/cross-site` URL in the installed Safari with [Prevent cross-site tracking](https://support.apple.com/en-au/guide/safari/sfri40732/mac) enabled. Before consent, the iframe from `http://127.0.0.1:4761/cross-site` must show no decision cookie, zero optional requests, and zero optional runs. Select `Accept all`. If Safari blocks the cross-site cookie write, OpenCookie must leave the decision absent, show the save alert and retry control, and keep both optional counters at zero. Close preferences and confirm that the persistent alert, retry control, and `Privacy choices` launcher remain visible.
+
+Open the printed first-party control URL next. Select `Accept all`, reload, and confirm that the decision cookie and optional resource persist. This control distinguishes Safari's cross-site policy from a broken adapter or an unavailable browser cookie store.
+
+The harness serves only the current built IIFE over loopback. It does not unlock Private Browsing and does not change Safari privacy settings. To test [Private Browsing](https://support.apple.com/guide/safari/browse-privately-ibrw1069/mac), the operator must unlock Safari, accept and reload in one private window, then close that window and start a new private window. The new private context must begin without the earlier decision. Do not enter or automate an operator password as part of this check.
+
+Verified in installed Safari 26.5 on macOS 26.5.1: the same Private window restored the decision after reload, and a new Private window started without that decision after the prior Private window closed. The clean optional-request sequence was `0` before consent, `1` after acceptance, `2` after the same-window reload, and still `2` in the fresh session. Page-local optional runs were `0`, `1`, `1`, and `0`. These are direct installed-Safari screenshots; Playwright MCP evidence is not counted toward this result.
+
+![Installed Safari Private window before consent](/images/recipes/testing/safari-private-preconsent.png)
+
+![Same installed Safari Private window after reload](/images/recipes/testing/safari-private-reload-persisted.png)
+
+![Fresh installed Safari Private window after the prior Private window closed](/images/recipes/testing/safari-private-fresh-context.png)
+
+Playwright's [`browserContext.addInitScript()`](https://playwright.dev/docs/api/class-browsercontext#browser-context-add-init-script) runs before page scripts and is suitable for deterministic getter and method failures. Fresh [non-persistent browser contexts](https://playwright.dev/docs/api/class-browsercontext) isolate cookies and local storage for the ephemeral-session case. Run the cases in Chromium, Firefox, and WebKit, but label the result accurately: [Playwright's WebKit is not branded Safari](https://playwright.dev/docs/browsers#webkit). A real Safari Private window on macOS is still required before claiming Safari-specific behavior.

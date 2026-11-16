@@ -1,0 +1,47 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "pnpm",
+  "plugins": [
+    "@stryker-mutator/vitest-runner",
+    "@stryker-mutator/typescript-checker"
+  ],
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.config.ts",
+    "related": true
+  },
+  "checkers": ["typescript"],
+  "tsconfigFile": "packages/core/tsconfig.json",
+  "typescriptChecker": {
+    "prioritizePerformanceOverAccuracy": false
+  },
+  "mutate": [
+    "packages/core/src/domain/**/*.ts",
+    "!packages/core/src/domain/**/*.test.ts",
+    "!packages/core/src/domain/**/*.d.ts",
+    "packages/cli/src/disclosure.ts",
+    "packages/cli/src/evidence-log.ts",
+    "packages/cli/src/findings.ts",
+    "packages/cli/src/har-scan.ts",
+    "packages/cli/src/html-scan.ts",
+    "packages/cli/src/lawful-basis.ts",
+    "packages/cli/src/operator-escape.ts",
+    "packages/cli/src/operator-server.ts",
+    "packages/cli/src/operator-session.ts",
+    "packages/cli/src/policy-declaration.ts",
+    "packages/cli/src/policy-draft.ts",
+    "packages/cli/src/publication-log.ts",
+    "packages/cli/src/serialize-publication-log.ts",
+    "packages/cli/src/serve-command.ts",
+    "packages/cli/src/serve-node.ts",
+    "packages/cli/src/site-registry.ts",
+    "packages/cli/src/storage-scan.ts"
+  ],
+  "thresholds": {
+    "high": 85,
+    "low": 85,
+    "break": 85
+  },
+  "reporters": ["progress", "clear-text", "html", "json"],
+  "ignorePatterns": ["/artifacts"]
+}

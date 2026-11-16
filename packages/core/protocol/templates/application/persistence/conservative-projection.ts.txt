@@ -1,0 +1,74 @@
+import type { PersistedDecisionRecord } from "../runtime/initialize-consent.js";
+
+/** @public */
+export interface AppliedDecisionChange {
+  readonly from: "denied" | "granted" | "unresolved";
+  readonly purposeId: string;
+  readonly to: "denied" | "granted";
+}
+
+/** @public */
+export interface ConservativePersistenceProjection {
+  readonly appliedChanges: readonly AppliedDecisionChange[];
+  readonly effectiveRecord: PersistedDecisionRecord;
+  readonly persistenceStatus: "failed-conservative";
+  readonly withheldPurposeIds: readonly string[];
+}
+
+/** @public */
+export function projectConservativePersistenceFailure(
+  previous: PersistedDecisionRecord | null,
+  requested: PersistedDecisionRecord,
+): ConservativePersistenceProjection {
+  const decisions = Object.create(null) as Record<
+    string,
+    "denied" | "granted"
+  >;
+  const appliedChanges: AppliedDecisionChange[] = [];
+  const withheldPurposeIds: string[] = [];
+  let retainedGrant = false;
+
+  for (const purposeId of Object.keys(requested.decisions).sort()) {
+    const requestedDecision = requested.decisions[purposeId];
+    const previousDecision = previous?.decisions[purposeId];
+    const effectiveDecision =
+      requestedDecision === "granted" && previousDecision === "granted"
+        ? "granted"
+        : "denied";
+
+    decisions[purposeId] = effectiveDecision;
+    if (effectiveDecision === "granted") retainedGrant = true;
+    if (requestedDecision === "granted" && effectiveDecision === "denied") {
+      withheldPurposeIds.push(purposeId);
+    }
+    if (previousDecision !== effectiveDecision) {
+      appliedChanges.push({
+        from: previousDecision ?? "unresolved",
+        purposeId,
+        to: effectiveDecision,
+      });
+    }
+  }
+
+  return Object.freeze({
+    appliedChanges: Object.freeze(appliedChanges),
+    effectiveRecord: Object.freeze({
+      ...requested,
+      decisions: Object.freeze(decisions),
+      expiresAt:
+        retainedGrant && previous
+          ? Math.min(previous.expiresAt, requested.expiresAt)
+          : requested.expiresAt,
+      method:
+        requested.method === "withdrawal"
+          ? "withdrawal"
+          : !retainedGrant
+            ? "reject-all"
+            : requested.method === "accept-all" && withheldPurposeIds.length
+              ? "granular"
+              : requested.method,
+    }) as PersistedDecisionRecord,
+    persistenceStatus: "failed-conservative",
+    withheldPurposeIds: Object.freeze(withheldPurposeIds),
+  });
+}

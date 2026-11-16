@@ -1,0 +1,172 @@
+---
+title: Accessibility, i18n, and themes
+description: Keep decision parity while localizing copy and changing visual tokens.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import RunnableSample from "../../../components/RunnableSample.astro";
+
+Provide complete localized copy and plain purpose disclosures. The first-visit bar keeps Reject all, Accept all, and Settings adjacent and equal in geometry, keyboard reachability, and visual weight. Settings opens the separate purpose editor. Purpose groups follow the validated policy's `presentationRootCategoryIds`. Each category-backed section has a category checkbox; selecting it applies the domain's category expansion, and a partial purpose selection makes it indeterminate. Valid purposes outside the visited category graph appear in a trailing ungrouped section with purpose choices but no category checkbox. When no presentation roots are declared, the editor renders every purpose in one flat section without a category choice.
+
+`copy.notControlled` localizes the heading for declared resource exceptions. Each exception is listed by its `label`, or its ID without one, with its reason. Both come from the validated resource policy, remain noninteractive, and must be authored for the deployed site. See the [support boundary](/reference/support/#declared-resource-exceptions) before using that classification.
+
+<RunnableSample id="presentation-contract" title="localized-presentation.ts" />
+
+## German
+
+`VANILLA_COPY_DE` is a complete German translation of every string the banner
+and preferences surface can show, using the formal "Sie". Pass it as `copy`.
+"Alle akzeptieren" and "Alle ablehnen" are deliberately the same length and
+equally direct, so the translation keeps decision parity rather than quietly
+favouring one choice.
+
+The interface declares the language of its copy with `lang` on its root:
+`de` for `VANILLA_COPY_DE` and `VANILLA_COPY_DE_DU`, `en` for the default copy.
+Screen readers therefore read the banner in its own language on any page.
+Custom copy carries its language in the `lang` key.
+
+`VANILLA_COPY_DE_DU` is the same surface in the informal "du". A control that
+addresses nobody keeps the formal wording, so the two versions cannot drift
+apart. The description, the failure notice, the restriction note, and the
+title are the strings that change; the title is "Deine Wahl, klar und
+deutlich." Pass it as `copy` to `mountOpenCookie` or the programmatic
+bootstrap. The drop-in script does not load it; `data-oc-locale="de"` stays on
+the formal copy.
+
+The drop-in script takes no custom copy, but it speaks German when its script
+tag has `data-oc-locale="de"`. The other accepted value is `en`, the default.
+Any other value is refused.
+
+<RunnableSample id="german-copy" title="german.ts" />
+
+## One policy in several languages
+
+A site that shows its choices in several languages keeps one policy, so a
+visitor who decides on one language's page is not asked again on another's.
+
+- Each purpose's `label` and `disclosure` are in the policy's own language.
+  `translations` adds a `locale`, `label` and `disclosure` for each further
+  language.
+- A category's `label` is its heading; without one, the heading is the
+  category's id. Its `translations` add a `locale` and `label` for each further
+  language.
+- Every purpose, and every labelled category, carries the same languages. A
+  `locale` is a canonical language tag, such as `en`, `de-AT` or `zh-Hant-TW`.
+
+Each page passes the copy for its language, such as `VANILLA_COPY_DE` or the
+default English copy. The panel shows the translation whose locale matches the
+copy's `lang` ignoring case, else the one for its primary language (`de-AT`
+shows `de`), else the policy's own text. A decision's identity is the same in
+every language. The stored record notes the language the visitor decided in.
+
+Translations are part of the policy's identity. Adding a language or rewording
+a translation changes that purpose's text, so it needs a new `policyVersion`
+and asks visitors once more, as any wording change does. A category's label
+changes the catalogue digest, as its structure does.
+
+A declared exception's `label` and `exceptionReason` are not part of that
+identity, so each language's page may pass its own. The one-line drop-in has
+one language and takes no translations.
+
+<RunnableSample id="localized-policy" title="localized-policy.ts" />
+
+## Match your site's design
+
+The banner's design is yours. OpenCookie ships a default look and a small kit of
+templates to start from. It owns what the banner does: the choices, the dialog,
+focus, and what is blocked. It does not own how the banner looks.
+
+### Colour tokens
+
+The default is a quiet card in the page's own type: rounded, a hairline border, and one soft shadow. It does not set a serif or a hard offset shadow. Reject all and Accept all are the same filled button. Settings keeps `.oc-btn--choice` and adds `.oc-btn--quiet` (transparent, accent text and border). In the panel, save and close are outlined and withdraw is quiet.
+
+Override semantic `--oc-*` CSS custom properties at the `.oc-root` boundary. Colour tokens are declared on `:where(.oc-root)`, which has no specificity, so a rule you write for `.oc-root` wins. The stylesheet is inserted as the first element of `<head>`, so a plain site rule of equal weight, such as `.oc-btn { border-radius: 0 }`, also wins by coming later. Component rules stay on a single class, so an element reset such as `button { border: 0 }` does not strip them. Use `--oc-ink` for body text, borders, and focus indicators, `--oc-paper` for the surface behind it, `--oc-muted` for secondary text, and `--oc-accent` for primary control fills. The focus ring is a 4px solid outline in `--oc-ink`, offset by 3px. Text on the accent uses `--oc-paper`, so every custom accent and paper pair must contrast with each other.
+
+Three more tokens sit on the same zero-specificity rule. `--oc-radius` is the card corner (12px). `--oc-border` is a 1px hairline mixed from `--oc-ink`. `--oc-shadow` is one blurred drop shadow mixed from `--oc-ink`.
+
+A site can name links for the banner, such as the privacy notice and the imprint, with `links` on `bootstrapOpenCookie`, `mountOpenCookie`, or the browser binding's `mount()`. Each entry is `{ href, label }`. They render in that order inside `<nav class="oc-bar-links">`, one `<a class="oc-link">` each. There is no row when the list is empty. An address is accepted only when, trimmed, it is a site path (`/privacy`, not `//other.example`), a fragment (`#privacy`), or an absolute `http:` or `https:` URL. Anything else, a blank label, or an address that contains a backslash or a control character, is refused before the banner mounts. The drop-in does not read links from attributes.
+
+Purpose choices stay `<input type="checkbox">`, with the same name, value, role and labelling. The default draws each one as a switch: a track and a knob, accent when checked, a distinct indeterminate state for a category, and dimmed when a restriction disables it. Under `forced-colors: active` it falls back to the native checkbox. A category row (`.oc-purpose.oc-category`) has no border and a bold label. A category whose only purpose uses the same label is not repeated as a heading; the purpose row stands for it.
+
+<RunnableSample id="theme-tokens" display="template" lang="css" title="site.css" />
+
+### Dark mode follows the page
+
+The default palette turns dark only when the page itself declares dark support,
+with `color-scheme: light dark` or `color-scheme: dark`. It follows the page's
+`color-scheme` through CSS `light-dark()`, not the visitor's system setting. A
+light-only page keeps a light banner when the visitor's system is dark, and a
+browser without `light-dark()` always shows the light palette. Setting your own
+tokens replaces both palettes.
+
+### Templates
+
+A template is a stylesheet that restyles the banner and nothing else. Load it
+after OpenCookie. Every rule is scoped to `.oc-root`, and its own tokens sit at
+zero specificity, so your rules still win over it. A template never hides a
+control, never makes accepting easier than rejecting, and never removes the
+focus ring.
+
+| Template  | Look                                                        |
+| --------- | ----------------------------------------------------------- |
+| (default) | Quiet card, the page's own type, a soft shadow              |
+| `soft`    | Rounded card, soft shadow, the page's own type              |
+| `minimal` | Flat sheet along the bottom edge, the page's own type       |
+
+In an application that bundles CSS:
+
+<RunnableSample id="template-import" display="template" title="main.ts" />
+
+On a page that uses the one-line drop-in, pin the template to the same version
+as the drop-in:
+
+<RunnableSample id="template-cdn" display="template" lang="html" title="index.html" />
+
+`soft` also reads `--oc-radius`, `--oc-border` and `--oc-shadow`, and `minimal`
+reads `--oc-radius` and `--oc-rule`. Copy a template into your own stylesheet
+when you want to change more than its tokens; it is yours from then on.
+
+### The styling surface
+
+These class names are a stable part of OpenCookie's contract. You may style
+them, scoped under `.oc-root` so your rule outranks the library's own:
+
+| Class                                          | What it is                                      |
+| ---------------------------------------------- | ----------------------------------------------- |
+| `.oc-root`                                     | The boundary every OpenCookie element sits in   |
+| `.oc-bar`                                      | The first-visit bar                             |
+| `.oc-bar-copy`, `.oc-bar-title`, `.oc-bar-description` | The bar's text column, heading and description |
+| `.oc-bar-actions`, `.oc-actions`               | A row of choices                                |
+| `.oc-btn`                                      | Every button                                    |
+| `.oc-btn--choice`                              | A choice: reject all, accept all, and settings  |
+| `.oc-btn--quiet`                               | The quiet choice: settings, and withdraw        |
+| `.oc-bar-links`, `.oc-link`                    | The banner's link row, and one link in it       |
+| `.oc-btn--dismiss`                             | Closing the bar without a decision              |
+| `.oc-btn--save`, `.oc-btn--close`              | Saving the settings, and closing them           |
+| `.oc-launcher`                                 | The button that reopens the choices             |
+| `.oc-panel`                                    | The settings dialog                             |
+| `.oc-meta`, `.oc-title`, `.oc-description`     | The dialog's eyebrow, heading and description   |
+| `.oc-purposes`, `.oc-purpose`                  | A category's group of purposes, and one purpose |
+
+Keep these rules outside any CSS cascade layer. OpenCookie's own stylesheet
+is not in a layer, and a browser ranks every unlayered rule above every
+layered one, whatever its specificity. A rule inside `@layer`, as every
+Tailwind layer is, therefore loses to the library's. The templates are
+unlayered for the same reason, so import them without `layer()`.
+
+Buttons also carry `data-oc-action`, for example `reject-all`, `accept-all`
+and `settings`. Keep the choices alike: giving accepting more weight than
+rejecting changes what a visitor is asked, not how it looks.
+
+Keep visible focus, minimum target size, readable contrast, forced-colors behavior, dark color preference, and reduced motion. Test every token override on both the non-modal bar and the modal settings panel.
+
+The first-visit bar does not trap focus or make the page inert. The settings panel opens with the native modal dialog API, moves focus to its visible title, contains Tab and Shift+Tab, prevents interaction with the background, closes with Escape, and returns focus to the exact Settings or Privacy choices button that opened it.
+
+The banner is the last element in `<body>`, so a page's skip link stays the first stop for the keyboard. On a first visit, when nothing on the page has focus, focus moves to the banner itself, a labelled region that is not modal: the next Tab reaches its Close button, then its choices and a screen reader reads its title and text. A page that already put focus somewhere keeps it, and a visitor who is asked again is not interrupted. After a choice, focus moves to the launcher, or to the page's own settings link under `launcher: false`.
+
+OpenCookie is a technical tool, not legal advice, a certified consent management platform, or a compliance guarantee. Your deployment remains responsible for its policy, catalogue, disclosures, wording, retention, and jurisdiction analysis. See the [support boundary](/reference/support/).
+
+<Aside type="note" title="Automation is not the final accessibility check">
+  Run axe for critical and serious failures, then complete the full keyboard
+  path and a screen-reader review in the rendered fixture.
+</Aside>

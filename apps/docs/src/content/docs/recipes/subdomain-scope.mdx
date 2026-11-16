@@ -1,0 +1,36 @@
+---
+title: Subdomain scope
+description: Choose host-only isolation or an explicitly validated shared cookie domain.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+Host-only is the safe default. Use shared scope only when sibling applications intentionally share the same policy identity and storage lifecycle.
+
+<RunnableSample id="subdomain-scope" title="shared-cookie-store.ts" />
+
+The no-build auto bundle exposes the same choice through explicit script attributes:
+
+<RunnableSample
+  id="subdomain-cdn"
+  lang="html"
+  title="index.html"
+  display="template"
+/>
+
+The shared store validates the configured domain against the current host and a registrable-domain resolver. IP addresses, localhost, unrelated suffixes, public suffixes, delimiter injection, and ambiguous duplicate cookies fail closed.
+
+Cookie and [Web Storage](https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API) adapters use an exact expected-record precondition and immediate readback for writes and conditional cleanup. Neither Web Storage nor [`Document.cookie`](https://developer.mozilla.org/en-US/docs/Web/API/Document/cookie) provides the cross-context conditional transaction required for a linearizable claim, so the built-in contract is optimistic rather than atomic between tabs. A custom server-backed `DecisionStore` can provide a stronger conditional operation when an application requires it. Store methods must settle before starting follow-up commands on the same `OpenCookie` instance. Calling and awaiting a client command from inside a pending store method creates a callback cycle because the command can be waiting for that same persistence operation.
+
+The default Web Storage path resolves `window.localStorage` lazily. If browser policy blocks the getter, the visitor can still reach the decision surface and a later retry re-probes it. The first successfully resolved handle is retained; later `getItem()`, `setItem()`, or `removeItem()` failures remain unknown failures instead of being reinterpreted as missing data. A write is never attempted until the current value has been read successfully, and a new grant remains blocked until readback confirms the stored bytes.
+
+The cookie adapter applies the same confirmation rule. Browser cookie assignment can be ignored without throwing, so the adapter reads the cookie back and reports a persistence failure when the value is absent or changed. Its `SameSite=Lax` decision cookie is intended for same-site, first-party navigation. It is not a promise that an embedded cross-site iframe can use unpartitioned storage. Test the deployed top-level and embedded contexts under the target browser's cookie policy.
+
+<Aside type="danger" title="Do not guess the registrable domain">
+String-splitting the final two labels fails for public suffixes such as `co.uk`. Supply a maintained Public Suffix List resolver and test real sibling hosts.
+</Aside>
+
+For the auto bundle, `data-oc-registrable-domain` is an explicit validation input rather than a bundled Public Suffix List. The browser rejects public-suffix cookie domains, but a rejected write cannot provide persistence. Derive the value during deployment and verify the actual app and shop hosts in a browser. Keep the shared domain as narrow as the application group allows.
+
+Origin and transport selection stay at the adapter boundary. A future hosted service or a deployment that needs durable server-side receipts can supply a custom `DecisionStore` without changing domain consent behavior. The built-in browser stores do not provide a server audit trail.

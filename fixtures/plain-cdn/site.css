@@ -1,0 +1,83 @@
+:root {
+  color-scheme: light dark;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: #f2efe5;
+  color: #171912;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 80% 10%, rgb(217 255 67 / 45%), transparent 28rem),
+    #f2efe5;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem clamp(1rem, 4vw, 3rem);
+  border-bottom: 2px solid currentColor;
+}
+
+.brand {
+  color: inherit;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+button {
+  min-height: 44px;
+  border: 2px solid currentColor;
+  background: #d9ff43;
+  color: #171912;
+  font: inherit;
+  font-weight: 800;
+  padding: 0.65rem 1rem;
+}
+
+main {
+  width: min(68rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: clamp(4rem, 12vw, 9rem) 0;
+}
+
+.eyebrow {
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1 {
+  max-width: 13ch;
+  margin: 0.75rem 0 1.5rem;
+  font-family: Georgia, serif;
+  font-size: clamp(3rem, 10vw, 7.5rem);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 0.9;
+}
+
+main > p:not(.eyebrow) {
+  max-width: 42rem;
+  font-size: 1.1rem;
+}
+
+iframe {
+  display: block;
+  width: min(100%, 36rem);
+  min-height: 12rem;
+  margin-top: 2rem;
+  border: 2px dashed currentColor;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root,
+  body {
+    background: #171912;
+    color: #f2efe5;
+  }
+}

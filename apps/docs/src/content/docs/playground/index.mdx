@@ -1,0 +1,17 @@
+---
+title: Local consent playground
+description: Explore an inspectable consent decision without an external service.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import ConsentPlayground from '../../../components/ConsentPlayground.astro';
+
+This small laboratory demonstrates equal decision paths, granular state, a visible receipt, persistence, and reset. It does not load a vendor script or send data to an external service.
+
+<ConsentPlayground />
+
+Reload the page to see the local demo decision return. Use **Reset demo** to delete it.
+
+<Aside type="note" title="This is a presentation demonstration">
+The production fixture matrix exercises the packaged core, storage, enforcement, framework adapters, signals, CSP, and browser behavior. This page intentionally stays local and dependency-free.
+</Aside>

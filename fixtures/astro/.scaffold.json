@@ -1,0 +1,15 @@
+{
+  "fixture": "astro",
+  "framework": "astro",
+  "frameworkVersion": "7.2.4",
+  "generator": "create-astro",
+  "generatorVersion": "5.2.3",
+  "scaffoldedAt": "2026-08-22",
+  "command": "pnpm dlx create-astro@5.2.3 fixtures/astro --template minimal --no-install --no-git --no-ai --yes",
+  "sources": [
+    "https://docs.astro.build/en/install-and-setup/",
+    "https://docs.astro.build/en/guides/on-demand-rendering/",
+    "https://docs.astro.build/en/guides/integrations-guide/node/",
+    "https://docs.astro.build/en/guides/view-transitions/"
+  ]
+}

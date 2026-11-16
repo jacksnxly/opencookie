@@ -1,0 +1,17 @@
+---
+title: Iframe blocking
+description: Keep optional embeds on about:blank until their purpose is granted.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+Declare an optional embed as a non-navigable `template` with `data-oc-iframe`. Put the real value in `data-src` or `data-srcdoc`, plus stable resource and category identifiers. OpenCookie creates a live iframe only after the matching purpose is allowed, which also prevents session-history restoration from navigating it before consent is evaluated.
+
+<RunnableSample id="iframe-blocking" title="video-frame.ts" />
+
+The controller keeps the first-party page in control. Starting creates a frame and copies the declared attributes and source. Stopping removes that active frame, but a remote document may already have received data before withdrawal.
+
+<Aside type="tip" title="Reserve the frame size">
+Wrap the template in a container that reserves the embed's width, height, and aspect ratio. A template itself does not render, so the surrounding layout must reserve the space needed by the activated iframe.
+</Aside>

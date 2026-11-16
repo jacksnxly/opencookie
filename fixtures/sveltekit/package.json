@@ -1,0 +1,35 @@
+{
+  "name": "@opencookie-fixtures/sveltekit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "prepare": "svelte-kit sync",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@opencookie-dev/core": "workspace:*",
+    "@opencookie-dev/svelte": "workspace:*",
+    "@opencookie-dev/vanilla": "workspace:*"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "5.5.7",
+    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/vite-plugin-svelte": "7.3.0",
+    "svelte": "5.56.10",
+    "svelte-check": "4.7.6",
+    "typescript": "6.0.3",
+    "vite": "8.2.2"
+  },
+  "opencookieFixtureSources": [
+    "vite.config.ts",
+    "src/app.html",
+    "src/routes/+layout.svelte",
+    "src/lib/FixturePage.svelte",
+    "src/lib/opencookie-store.ts",
+    "src/lib/fixture-client.ts"
+  ]
+}

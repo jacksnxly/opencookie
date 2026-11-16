@@ -1,0 +1,50 @@
+[
+  {
+    "name": "core browser ESM",
+    "path": "packages/core/dist/index.js",
+    "limit": "27708 B",
+    "gzip": true
+  },
+  {
+    "name": "core domain ESM",
+    "path": "packages/core/dist/domain.js",
+    "limit": "10543 B",
+    "gzip": true
+  },
+  {
+    "name": "core application ESM",
+    "path": "packages/core/dist/application.js",
+    "limit": "14220 B",
+    "gzip": true
+  },
+  {
+    "name": "core reconciliation ESM",
+    "path": "packages/core/dist/reconciliation.js",
+    "limit": "7941 B",
+    "gzip": true
+  },
+  {
+    "name": "core infrastructure ESM",
+    "path": "packages/core/dist/infrastructure.js",
+    "limit": "5789 B",
+    "gzip": true
+  },
+  {
+    "name": "core auto ESM",
+    "path": "packages/core/dist/auto.js",
+    "limit": "26121 B",
+    "gzip": true
+  },
+  {
+    "name": "vanilla auto IIFE",
+    "path": "packages/adapters/vanilla/dist/auto.iife.js",
+    "limit": "45000 B",
+    "gzip": true
+  },
+  {
+    "name": "vanilla auto IIFE raw",
+    "path": "packages/adapters/vanilla/dist/auto.iife.js",
+    "limit": "150000 B",
+    "brotli": false
+  }
+]

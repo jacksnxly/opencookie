@@ -1,0 +1,95 @@
+export {
+  definePolicy,
+  type BlankCategoryLabelIssue,
+  type BlankPolicyEntityIdIssue,
+  type BlankPurposeDisclosureIssue,
+  type BlankPurposeIdIssue,
+  type BlankPurposeLabelIssue,
+  type CategoryCycleIssue,
+  type DefinedPolicy,
+  type DefinedPolicyCategory,
+  type DefinedPolicyPurpose,
+  type DefinedPolicyReference,
+  type DuplicatePurposeDependencyIssue,
+  type DuplicatePurposeIdIssue,
+  type DuplicatePurposeReferenceIssue,
+  type DuplicateTranslationLocaleIssue,
+  type IncompleteTranslationsIssue,
+  type DuplicatePolicyEntityIdIssue,
+  type InvalidPurposeReferenceIssue,
+  type InvalidPolicyDefinitionEntryIssue,
+  type InvalidTranslationLocaleIssue,
+  type MissingPurposeReferenceIssue,
+  type NonEmptyPolicyReferenceIds,
+  type PolicyCategoryDefinition,
+  type PolicyCategoryTranslation,
+  type PolicyDefinition,
+  type PolicyDefinitionIssue,
+  type PolicyDefinitionResult,
+  type PolicyPurposeDefinition,
+  type PolicyPurposeTranslation,
+  type PolicyReferenceDefinition,
+  type PurposeDependencyCycleIssue,
+  type UnknownCategoryReferenceIssue,
+  type UnknownCategoryPurposeReferenceIssue,
+  type UnknownDataCategoryReferenceIssue,
+  type UnknownOperationReferenceIssue,
+  type UnknownPresentationRootCategoryReferenceIssue,
+  type UnknownProviderReferenceIssue,
+  type UnknownPurposeDependencyIssue,
+  type UnknownRecipientReferenceIssue,
+  type UnknownRetentionReferenceIssue,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- Retained as a public compatibility re-export.
+  type UnreachablePurposeIssue,
+} from "./define-policy.js";
+export { normalizeIdentifier as normalizePolicyIdentifier } from "./policy-primitives.js";
+export {
+  canonicalizePolicy,
+  createPolicySnapshot,
+  isSupportedPolicyIdentity,
+  type PolicyCanonicalRepresentations,
+  type PolicySnapshot,
+  type PolicySnapshotDefinition,
+} from "./policy-identity.js";
+export {
+  diffPolicies,
+  type FailedPolicyDiff,
+  type PolicyChangeReason,
+  type PolicyChangeSet,
+  type PolicyDiffResult,
+  type PolicyPurposeChange,
+  type PolicySnapshotIdentity,
+  type SuccessfulPolicyDiff,
+  type PolicyVersionChangedWithoutAffectedPurposeIssue,
+  type PolicyVersionConsistencyIssue,
+  type PolicyVersionUnchangedWithAffectedPurposeIssue,
+} from "./diff-policies.js";
+export { expandCategorySelection } from "./expand-category-selection.js";
+export {
+  type CategorySelectionState,
+  resolveCategorySelectionStates,
+} from "./resolve-category-selection-states.js";
+export {
+  type PolicySection,
+  projectPolicySections,
+} from "./project-policy-sections.js";
+export {
+  type PurposeDecisionInput,
+  resolvePurposeDependencies,
+  resolvePurposeSelection,
+} from "./resolve-purpose-dependencies.js";
+export {
+  type DeclaredExceptionPolicyResourceDefinition,
+  type DefinedPolicyResource,
+  type DefinedPolicyService,
+  type DefinedResourcePolicy,
+  defineResourcePolicy,
+  type OptionalPolicyResourceDefinition,
+  type PolicyResourceDefinition,
+  type PolicyServiceDefinition,
+  type ResourcePolicyDefinition,
+  type ResourcePolicyDefinitionResult,
+  type ResourcePolicyIssue,
+  snapshotDefinedResourcePolicy,
+} from "./resource-policy.js";
+export { resolvePolicyText, type PolicyText } from "./resolve-policy-text.js";

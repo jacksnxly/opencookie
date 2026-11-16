@@ -1,0 +1,150 @@
+import type { ConsentRecord } from "../../domain/consent-decisioning/index.js";
+import type {
+  DenialTransition,
+  PendingDenialTransition,
+} from "../transitions/execute-denial-transition.js";
+import type { GrantTransition } from "../transitions/execute-grant-transition.js";
+import {
+  projectConsentRuntimeStateWith,
+  type ConsentRuntimeProjection,
+} from "./project-consent-runtime-kernel.js";
+import type {
+  CapturedConsentRuntimeKernelPorts,
+  CapturedConsentRuntimeTransitionEffect,
+} from "./snapshot-consent-runtime-inputs.js";
+import type { ConsentRuntimeProjectionContext } from "./consent-runtime-projection-context.js";
+
+type RuntimeTransition =
+  DenialTransition | GrantTransition | PendingDenialTransition;
+type FinalRuntimeTransition = DenialTransition | GrantTransition;
+
+export interface PreparedRuntimeEffect {
+  readonly events: CapturedConsentRuntimeTransitionEffect["events"];
+  readonly record: ConsentRecord;
+  readonly runtime: ConsentRuntimeProjection;
+}
+
+export function projectRuntimeFor(
+  context: ConsentRuntimeProjectionContext,
+  record: ConsentRecord | undefined,
+  now: number,
+): ConsentRuntimeProjection {
+  return projectConsentRuntimeStateWith(
+    {
+      ...(record === undefined ? {} : { consentRecord: record }),
+      now,
+      policyHistory: context.policyHistory,
+      policySnapshot: context.policySnapshot,
+      ...(context.privacyRestrictions === undefined
+        ? {}
+        : { privacyRestrictions: context.privacyRestrictions }),
+      resourcePolicy: context.resourcePolicy,
+      ...(context.servicePreferences === undefined
+        ? {}
+        : { servicePreferences: context.servicePreferences }),
+    },
+    context.projectPolicy,
+    context.resolveAccess,
+  );
+}
+
+export function createRuntimeTransitionProjection(
+  ports: CapturedConsentRuntimeKernelPorts,
+  prepared: PreparedRuntimeEffect,
+  conservative?: PreparedRuntimeEffect,
+  receiptOccurredAt?: number,
+) {
+  const effects = new WeakMap<object, CapturedConsentRuntimeTransitionEffect>();
+  const effectFor = (
+    transition: RuntimeTransition,
+  ): CapturedConsentRuntimeTransitionEffect => {
+    const existing = effects.get(transition);
+    if (existing) return existing;
+    const projection =
+      transition.persistenceStatus === "failed-conservative"
+        ? conservative
+        : prepared;
+    if (projection === undefined) {
+      throw new TypeError("Missing conservative runtime projection.");
+    }
+    const effect = Object.freeze({
+      events: projection.events,
+      persistenceStatus: transition.persistenceStatus,
+      record: projection.record,
+      runtime: projection.runtime,
+      transitionId: transition.transitionId,
+    });
+    effects.set(transition, effect);
+    return effect;
+  };
+
+  return [
+    {
+      broadcast: (transition: RuntimeTransition) =>
+        ports.broadcast(effectFor(transition)),
+      commit: (transition: RuntimeTransition) => {
+        ports.commit(effectFor(transition));
+      },
+      notify: (transition: RuntimeTransition) => {
+        ports.notify(effectFor(transition));
+      },
+      receipt: (transition: FinalRuntimeTransition) => {
+        let occurredAt = receiptOccurredAt;
+        if (occurredAt === undefined) {
+          if (transition.record.method !== "withdrawal") {
+            throw new TypeError(
+              "Withdrawal receipt requires a withdrawal record.",
+            );
+          }
+          occurredAt = transition.record.withdrawnAt;
+        }
+        return ports.aftercare(
+          Object.freeze({
+            occurredAt,
+            persistenceStatus: transition.persistenceStatus,
+            record: transition.record,
+            transitionId: transition.transitionId,
+          }),
+        );
+      },
+      reconcile: (transition: RuntimeTransition) =>
+        ports.reconcile(effectFor(transition)),
+      store: ports.store,
+    },
+    effectFor,
+  ] as const;
+}
+
+export function projectRuntimeTransitionResult<
+  CommittedTransition extends FinalRuntimeTransition,
+  DegradedTransition extends FinalRuntimeTransition,
+  Diagnostic,
+>(
+  result:
+    | {
+        readonly diagnostics: readonly Diagnostic[];
+        readonly outcome: "degraded";
+        readonly transition: DegradedTransition;
+      }
+    | {
+        readonly outcome: "committed";
+        readonly transition: CommittedTransition;
+      },
+  effectFor: (
+    transition: CommittedTransition | DegradedTransition,
+  ) => CapturedConsentRuntimeTransitionEffect,
+) {
+  const effect = effectFor(result.transition);
+  return result.outcome === "degraded"
+    ? Object.freeze({
+        diagnostics: result.diagnostics,
+        effect,
+        outcome: "degraded" as const,
+        transition: result.transition,
+      })
+    : Object.freeze({
+        effect,
+        outcome: "committed" as const,
+        transition: result.transition,
+      });
+}

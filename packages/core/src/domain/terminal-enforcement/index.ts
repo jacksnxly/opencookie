@@ -1,0 +1,25 @@
+export {
+  type AccessBlockReason,
+  type AccessConsentSnapshot,
+  type AccessConsentStatus,
+  type AccessDecisionValue,
+  type AccessPolicyPurpose,
+  type AccessPolicyResource,
+  type AccessPolicySnapshot,
+  type AccessPurposeDecision,
+  type AllowedResourceAccess,
+  type BlockedResourceAccess,
+  type EffectiveAccessPlan,
+  type EffectiveResourceAccess,
+  type ResolveEffectiveAccessInput,
+  type ServicePreferenceRecord,
+  resolveEffectiveAccess,
+  resolvePermittedPurposes,
+} from "./resolve-effective-access.js";
+export {
+  type DiffEffectiveAccessInput,
+  type EffectiveAccessChange,
+  type EffectiveAccessDiff,
+  type EffectiveAccessLifecycle,
+  diffEffectiveAccess,
+} from "./diff-effective-access.js";

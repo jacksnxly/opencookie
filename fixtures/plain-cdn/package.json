@@ -1,0 +1,10 @@
+{
+  "name": "@opencookie-fixtures/plain-cdn",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --check server.mjs && node --check fixture.js",
+    "start": "node server.mjs"
+  }
+}

@@ -1,0 +1,21 @@
+node_modules/
+.cache/
+.pnpm-store/
+.turbo/
+dist/
+coverage/
+.stryker-tmp/
+playwright-report/
+reports/
+test-results/
+packages/**/temp/
+*.tgz
+.env
+.env.*
+!.env.example
+.DS_Store
+artifacts/
+.release/
+
+# npm auth token: never commit. Local only.
+.npmrc

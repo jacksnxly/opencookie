@@ -1,0 +1,91 @@
+---
+title: Plain HTML and self-hosting
+description: Add a same-origin or pinned-CDN OpenCookie build without a framework.
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import RunnableSample from "../../../components/RunnableSample.astro";
+
+## Verified fresh-app workflow
+
+Create an empty directory, enter it, and run the following sequence. After the scaffold command, replace the empty file with the minimal document shown below.
+
+- Scaffold: `touch index.html`
+- Create page: `node --input-type=module --eval 'import { writeFile } from "node:fs/promises"; await writeFile("index.html", Buffer.from("PCFkb2N0eXBlIGh0bWw+CjxodG1sIGxhbmc9ImVuIj4KICA8aGVhZD4KICAgIDxtZXRhIGNoYXJzZXQ9IlVURi04Ij4KICAgIDxtZXRhIG5hbWU9InZpZXdwb3J0IiBjb250ZW50PSJ3aWR0aD1kZXZpY2Utd2lkdGgsIGluaXRpYWwtc2NhbGU9MS4wIj4KICAgIDx0aXRsZT5PcGVuQ29va2llIGV4YW1wbGU8L3RpdGxlPgogIDwvaGVhZD4KICA8Ym9keT4KICAgIDxtYWluPjxoMT5PcGVuQ29va2llIGV4YW1wbGU8L2gxPjwvbWFpbj4KICA8L2JvZHk+CjwvaHRtbD4K", "base64"));'`
+
+<RunnableSample
+  id="plain-minimal"
+  lang="html"
+  title="index.html before initialization"
+  display="template"
+/>
+
+- Install: `none`
+- Initialize: `npx --yes opencookie@0.4.1 init --yes --self-host`
+- Build: `none`
+- Serve: `python3 -m http.server 4173`
+
+The static file is the build output. Open `http://127.0.0.1:4173/` to inspect the initialized banner.
+
+Observed output: the initializer completed, a second initialization changed no files, and the static server returned HTTP 200. This path has no package install or build command. The compact classic-script starter places its Analytics purpose under a real `optional` presentation root. First visit renders the fixed bottom bar with equally weighted Reject all, Accept all, and Settings controls. Settings opens the separate modal panel, where choosing the `optional` category selects Analytics through the domain policy. Use the manual module API below with a `policyDefinition` when the site's catalogue differs.
+
+## Browser-verified result
+
+This exact production workflow was exercised from a clean storage state in a real browser. Before consent, `opencookie-demo.js` had zero requests and zero executions. Accept all persisted across a new navigation. Analytics was then denied with Save choices, consent was withdrawn, and a final navigation again produced zero demo requests and executions.
+
+The first two images below are current-surface captures from the corresponding rebuilt repository production fixture. They are separate from the fresh-app run described above.
+
+![Plain HTML consent banner before consent](/images/getting-started/plain-html/banner-preconsent.png)
+
+![Plain HTML settings panel showing the optional category checkbox and Analytics purpose checkbox](/images/getting-started/plain-html/preferences-open.png)
+
+![Plain HTML after withdrawal and a fresh navigation](/images/getting-started/plain-html/withdrawal-reload-blocked.png)
+
+<Steps>
+1. Run the unattended self-hosted initializer from the directory that contains `index.html`.
+   The CLI does not run a project package-manager install for this path. It copies the exact browser bundle installed with the CLI to `vendor/opencookie/auto.iife.js`, writes `opencookie-demo.js`, `.opencookie/snippet.html`, and `.opencookie-init.json`, then adds the same marked block to `index.html`. A completed second run changes nothing.
+   The initializer computes the SHA-384 integrity attribute from the exact bytes it copies. The generated bootstrap and inert demo references are both same-origin, and no CDN URL is generated in this mode.
+
+2. Review the generated block in `index.html`. It loads `/vendor/opencookie/auto.iife.js` and declares `/opencookie-demo.js` as an inert Analytics resource. The browser must not request or execute that resource before Analytics is granted.
+
+   Replace the demo with the site's actual optional scripts and frames when you customise the policy. Keep every optional resource inert before the browser can fetch it. Follow the [pre-consent blocking recipe](/recipes/pre-consent-blocking/).
+
+3. If CDN delivery is intentional, omit `--self-host`:
+   run `npx --yes opencookie@0.4.1 init --yes` instead.
+
+   That mode writes the same inert demo resource but uses the version-pinned auto bundle below.
+
+   <RunnableSample
+     id="cdn-one-line"
+     lang="html"
+     title="index.html"
+     display="template"
+   />
+
+   The exact version and SHA-384 integrity token bind the browser to the verified packed IIFE. Keep `integrity` synchronized with any version or bundle change and retain `crossorigin="anonymous"` so the browser can enforce SRI across origins.
+
+   Edit the `data-oc-*` attributes in `index.html` when the policy version, storage key, or purpose copy changes. The plain HTML path does not create TypeScript configuration files because the auto bundle reads its configuration from these attributes. The compact auto policy owns the `optional` presentation root; use the manual module path for a different category graph.
+
+   For the same reason, `opencookie policy install` cannot change what a plain-HTML page enforces. It refuses, names the policy version the page still runs, and writes nothing, and `opencookie doctor` reports `plain-html-policy-not-enforced` while a policy is published. Visitors decide on the one purpose the attributes describe, not on a published policy.
+
+   The sample above shows customised attribute values so each one is visible. The initializer writes its own defaults, so your `index.html` will differ: `data-oc-policy-version="policy-1"`, `data-oc-storage-key="opencookie.consent"`, and the starter purpose copy. The storage key matters if you write a browser test, because the decision is persisted under whatever `data-oc-storage-key` holds. The [browser test contract](/recipes/testing/) lists the shipped bar and panel selectors, every control label, and both storage transports.
+
+   The auto bundle keeps only its current policy snapshot. On an identity mismatch, prior grants become unresolved and prompt again, denials remain denied, and a valid withdrawal remains withdrawn. Use the programmatic module path when selective re-consent requires a verified current-inclusive policy history. While the page remains open, auto also monitors the active expiry deadline and refreshes access without waiting for a reload.
+
+</Steps>
+
+<Aside type="caution" title="The attributes are configuration">
+  The auto bundle mounts OpenCookie from the script attributes. Bump
+  `data-oc-policy-version` after a material policy change so stored decisions
+  are evaluated against the new version.
+</Aside>
+
+## Manual API alternative
+
+Use the module API when the page needs a custom catalogue or application-controlled mount. Create the core client, then mount the no-framework interface after the document is ready.
+
+If a custom policy declares no `presentationRootCategoryIds`, the panel renders every purpose in one flat section without a category choice. If roots are declared, any valid purpose outside the visited category graph is still rendered in a trailing ungrouped section.
+
+<RunnableSample id="plain-html" title="src/plain-opencookie.ts" />
+
+For a nonce-only CSP, prefer the self-hosted initializer or allow your pinned CDN origin and pass the current response nonce to the manual mount call.

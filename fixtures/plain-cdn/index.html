@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" data-oc-server-gpc="__OC_SERVER_GPC__">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenCookie plain CDN fixture</title>
+    <link rel="stylesheet" href="/site.css" />
+    <script defer nonce="fixture-nonce" src="/essential.js"></script>
+    <script
+      type="text/plain"
+      nonce="fixture-nonce"
+      data-oc-resource="analytics-script"
+      data-oc-category="analytics"
+      data-src="http://tracker.plain-cdn.opencookie.test:4400/analytics.js?resource=initial"
+    ></script>
+    <script
+      defer
+      nonce="fixture-nonce"
+      data-oc-policy-version="policy-1"
+      data-oc-storage="cookie"
+      data-oc-storage-key="opencookie.consent"
+      data-oc-cookie-domain="plain-cdn.opencookie.test"
+      data-oc-registrable-domain="opencookie.test"
+      data-oc-purpose-id="analytics"
+      data-oc-purpose-label="Analytics"
+      data-oc-purpose-description="Understand aggregate site usage."
+      data-oc-google-consent-mode="basic"
+      data-oc-google-analytics-resource="analytics-script"
+      data-oc-gpc-purpose-id="analytics"
+      data-oc-server-gpc="__OC_SERVER_GPC__"
+      integrity="sha384-hkKtmu0yhY+0myfpO6CDVN9dgdER+9VCnH+Cwh7vGYt4jbN6GdbD5L+fcmeMlMWS"
+      crossorigin="anonymous"
+      src="https://cdn.jsdelivr.net/npm/@opencookie-dev/vanilla@0.4.0/dist/auto.iife.js"
+    ></script>
+    <script defer nonce="fixture-nonce" src="/fixture.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">OpenCookie test shop</a>
+      <button id="add-resource" data-testid="route-control" type="button">
+        Open dynamic route
+      </button>
+    </header>
+    <main id="content-sentinel" data-server-rendered="plain-cdn">
+      <p class="eyebrow">Production fixture</p>
+      <h1>Consent should be calm, clear, and testable.</h1>
+      <p>
+        This page keeps its main content stable while OpenCookie manages
+        optional resources.
+      </p>
+      <output id="fixture-status" aria-live="polite">Initial route</output>
+      <template
+        data-oc-iframe
+        title="Optional product video"
+        data-oc-resource="product-video"
+        data-oc-category="analytics"
+        data-src="http://tracker.plain-cdn.opencookie.test:4400/frame"
+      ></template>
+    </main>
+  </body>
+</html>

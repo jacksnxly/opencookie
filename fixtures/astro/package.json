@@ -1,0 +1,32 @@
+{
+  "name": "@opencookie-fixtures/astro",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "check": "astro check",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@opencookie-dev/astro": "workspace:*",
+    "@opencookie-dev/core": "workspace:*",
+    "@opencookie-dev/vanilla": "workspace:*"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@astrojs/node": "11.1.4",
+    "astro": "7.2.4",
+    "typescript": "6.0.3"
+  },
+  "opencookieFixtureSources": [
+    "astro.config.mjs",
+    "src/components/FixturePage.astro",
+    "src/opencookie.client.ts",
+    "src/fixture-client.ts"
+  ]
+}

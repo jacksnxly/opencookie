@@ -1,0 +1,27 @@
+---
+title: Policy versions and re-consent
+description: Bind decisions to policy identity and prompt only for meaningful changes.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+A decision records both the human policy version and deterministic catalogue identities. Change the policy version deliberately when the decision surface changes. Keep it unchanged for an editorial field that is explicitly outside that surface.
+
+<RunnableSample id="policy-version" title="policy-version.ts" />
+
+Configure the generic client with a current-inclusive `policyHistory`: the current verified snapshot plus each prior verified snapshot whose stored records remain supported. The runtime captures that bounded list once, verifies every identity, finds the snapshot that matches the stored record, and derives its own reason-coded change set. Do not supply a caller-authored affected-purpose list.
+
+With valid history, unaffected decisions carry forward. Affected grants and new purposes become unresolved and stay blocked, while existing denials remain denied. Missing, duplicate, malformed, or digest-mismatched history fails closed. The current-only classic-script auto product has no trusted historical catalogue. On an identity mismatch, prior grants become unresolved and prompt again, denials remain denied, and a valid withdrawal remains withdrawn.
+
+Use `diffPolicies()` separately when an operator tool needs to preview added, removed, or changed purposes. A new purpose, provider, operation, recipient, retention, data category, dependency, or visitor-facing disclosure is meaningful. A purpose's translations are visitor-facing text too, so adding a language or rewording one marks that purpose as changed. See [one policy in several languages](/recipes/a11y-i18n-theming/#one-policy-in-several-languages). The application runtime derives the authoritative change set again from the verified snapshots it captured.
+
+`definePolicy()` publishes an optional purpose only when its visitor-facing disclosure is nonblank and it references at least one declared provider, operation, retention period, recipient, and data category. Missing fields and unresolved identifiers return stable field paths so configuration tooling can point to the exact declaration that needs attention.
+
+The order you list `presentationRootCategoryIds`, a category's `categoryIds` and its `purposeIds` in is the order the panel and the declaration show them in. That order is presentation, not a decision, so it is left out of the identity: reordering keeps both digests, re-asks nobody, and `opencookie policy publish` accepts a reordering under the live version. Before core 0.2.3 the order was sorted alphabetically; publish the policy again with CLI 0.3.0 or later to show its authored order.
+
+A material surface change requires a new `policyVersion`. A version change without an affected purpose, or an affected purpose without a version change, is inconsistent and fails closed. See [expiry, policy changes, and withdrawal](/recipes/decision-lifecycle/) for the runtime lifecycle.
+
+<Aside type="caution" title="Do not bump versions as a blanket reset">
+An unexplained global re-prompt teaches users to dismiss the interface. Retain the verified snapshots needed to explain why a choice needs review, and prune unsupported history deliberately.
+</Aside>

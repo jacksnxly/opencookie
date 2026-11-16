@@ -1,0 +1,32 @@
+{
+  "name": "@opencookie-dev/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/verify-docs-generate-api.mjs && astro check && astro build",
+    "check": "astro check",
+    "dev": "astro dev",
+    "preview": "astro preview",
+    "test": "node --test ../../scripts/verify-docs.test.mjs",
+    "verify": "node --test ../../scripts/verify-docs.test.mjs && node ../../scripts/verify-docs-generate-api.mjs --check && astro check && astro build && node ../../scripts/verify-docs-samples.mjs && node ../../scripts/verify-docs.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.41.7",
+    "astro": "7.2.4"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@nuxt/kit": "4.5.2",
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "happy-dom": "20.11.6",
+    "nuxt": "4.5.2",
+    "react": "19.2.8",
+    "sharp": "0.35.3",
+    "svelte": "5.56.10",
+    "tsx": "4.23.12",
+    "typescript": "5.9.3",
+    "vue": "3.5.41"
+  }
+}

@@ -1,0 +1,154 @@
+import type {
+  DecisionStore,
+  DecisionStoreConditionalClearResult,
+  DecisionStoreWriteResult,
+} from "./persist-grant.js";
+import type { PersistedDecisionRecord } from "../runtime/initialize-consent.js";
+
+/** @public */
+export type DenialPersistenceDiagnostic =
+  | { readonly code: "denial-clear-failed" }
+  | { readonly code: "denial-clear-unavailable" }
+  | { readonly code: "denial-persistence-conflict" }
+  | { readonly code: "denial-persistence-failed" }
+  | { readonly code: "denial-readback-mismatch" };
+
+/** @public */
+export type DenialPersistenceResult =
+  | {
+      readonly effectiveRecord: PersistedDecisionRecord;
+      readonly outcome: "committed";
+    }
+  | {
+      readonly diagnostics: readonly DenialPersistenceDiagnostic[];
+      readonly effectiveRecord: PersistedDecisionRecord;
+      readonly outcome: "degraded";
+    };
+
+export interface DenialStateStore<State> {
+  readonly clearIfCurrent?: (
+    expected: State,
+  ) => Promise<DecisionStoreConditionalClearResult>;
+  readonly compareAndSet: (
+    expected: State | null,
+    candidate: State,
+  ) => Promise<DecisionStoreWriteResult>;
+}
+
+export interface DenialStatePersistenceCommand<State> {
+  readonly candidate: State;
+  readonly cleanupStates?: readonly State[];
+  readonly continueCleanupAfterError?: boolean;
+  readonly equals?: (left: State, right: State) => boolean;
+  readonly predecessors: readonly (State | null)[];
+}
+
+export interface DenialStatePersistenceResult {
+  readonly diagnostics: readonly DenialPersistenceDiagnostic[];
+  readonly status: "confirmed" | "failed";
+}
+
+function uniqueStates<State>(
+  states: readonly (State | null)[],
+  equals?: (left: State, right: State) => boolean,
+): readonly (State | null)[] {
+  const unique: (State | null)[] = [];
+  for (const state of states) {
+    if (
+      !unique.some((existing) =>
+        existing === null || state === null
+          ? existing === state
+          : existing === state || equals?.(existing, state) === true,
+      )
+    ) {
+      unique.push(state);
+    }
+  }
+  return unique;
+}
+
+/** Package-private exact-state denial persistence shared by terminal programs. */
+export async function persistDenialState<State>(
+  store: DenialStateStore<State>,
+  command: DenialStatePersistenceCommand<State>,
+): Promise<DenialStatePersistenceResult> {
+  const predecessors = uniqueStates(command.predecessors, command.equals);
+  const diagnostics: DenialPersistenceDiagnostic[] = [];
+  for (const expected of predecessors) {
+    try {
+      const result = await store.compareAndSet(expected, command.candidate);
+      if (result.status === "written") {
+        return { diagnostics: Object.freeze(diagnostics), status: "confirmed" };
+      }
+      if (result.status === "readback-mismatch") {
+        diagnostics.push({ code: "denial-readback-mismatch" });
+        break;
+      }
+    } catch {
+      diagnostics.push({ code: "denial-persistence-failed" });
+      break;
+    }
+  }
+  if (diagnostics.length === 0) {
+    diagnostics.push({ code: "denial-persistence-conflict" });
+  }
+
+  const clear = store.clearIfCurrent;
+  let cleared = false;
+  let unavailable = typeof clear !== "function";
+  if (typeof clear === "function") {
+    const cleanup = uniqueStates(
+      [
+        command.candidate,
+        ...predecessors.filter((state) => state !== null),
+        ...(command.cleanupStates ?? []),
+      ],
+      command.equals,
+    );
+    for (const state of cleanup) {
+      if (state === null) continue;
+      try {
+        if ((await clear.call(store, state)) === "cleared") {
+          cleared = true;
+          break;
+        }
+      } catch {
+        unavailable = typeof store.clearIfCurrent !== "function";
+        if (!command.continueCleanupAfterError) break;
+      }
+    }
+  }
+  if (!cleared) {
+    diagnostics.push({
+      code: unavailable ? "denial-clear-unavailable" : "denial-clear-failed",
+    });
+  }
+  return { diagnostics: Object.freeze(diagnostics), status: "failed" };
+}
+
+/** @public */
+export async function persistDenial(
+  store: DecisionStore,
+  expected: PersistedDecisionRecord | null,
+  rejection: PersistedDecisionRecord,
+): Promise<DenialPersistenceResult> {
+  if (expected && expected.recordId !== rejection.recordId) {
+    return {
+      diagnostics: [{ code: "denial-persistence-conflict" }],
+      effectiveRecord: rejection,
+      outcome: "degraded",
+    };
+  }
+  const persistence = await persistDenialState(store, {
+    candidate: { record: rejection },
+    continueCleanupAfterError: true,
+    predecessors: [expected ? { record: expected } : null],
+  });
+  return persistence.status === "confirmed"
+    ? { effectiveRecord: rejection, outcome: "committed" }
+    : {
+        diagnostics: persistence.diagnostics,
+        effectiveRecord: rejection,
+        outcome: "degraded",
+      };
+}

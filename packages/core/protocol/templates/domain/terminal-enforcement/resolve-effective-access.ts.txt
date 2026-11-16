@@ -1,0 +1,392 @@
+import { compareStrings } from "../shared/compare-strings.js";
+import type { ProcessingRestrictionSet } from "../shared/processing-restriction.js";
+
+/** @public */
+export type AccessBlockReason =
+  | "invalid-policy"
+  | "first-visit"
+  | "policy-change"
+  | "withdrawn"
+  | "expired"
+  | "denied"
+  | "purpose-dependency"
+  | "service-preference"
+  | "privacy-signal";
+
+/** @public */
+export type AccessConsentStatus =
+  "active" | "expired" | "first-visit" | "requires-reconsent" | "withdrawn";
+
+/** @public */
+export type AccessDecisionValue = "denied" | "granted" | "unresolved";
+
+/** @public */
+export interface AccessPurposeDecision {
+  readonly decision: AccessDecisionValue;
+  readonly purposeId: string;
+}
+
+/** @public */
+export interface AccessConsentSnapshot {
+  readonly decisions: readonly AccessPurposeDecision[];
+  readonly status: AccessConsentStatus;
+}
+
+/** @public */
+export interface AccessPolicyPurpose {
+  readonly dependsOn: readonly string[];
+  readonly id: string;
+}
+
+/** @public */
+export type AccessPolicyResource =
+  | {
+      readonly access: "declared-exception";
+      readonly exceptionReason: string;
+      readonly id: string;
+      readonly label?: string;
+      readonly purposeIds: readonly string[];
+      readonly serviceId: string;
+    }
+  | {
+      readonly access: "optional";
+      readonly id: string;
+      readonly purposeIds: readonly string[];
+      /** Any one permitted purpose allows it; otherwise every one must be. */
+      readonly purposeMatch?: "any";
+      readonly serviceId: string;
+    };
+
+/** @public */
+export interface AccessPolicySnapshot {
+  readonly purposes: readonly AccessPolicyPurpose[];
+  readonly resources: readonly AccessPolicyResource[];
+  readonly valid: boolean;
+}
+
+/** @public */
+export interface ServicePreferenceRecord {
+  readonly restrictedServiceIds: readonly string[];
+}
+
+/** @public */
+export interface ResolveEffectiveAccessInput {
+  readonly consent: AccessConsentSnapshot;
+  readonly policy: AccessPolicySnapshot;
+  readonly privacyRestrictions?: ProcessingRestrictionSet;
+  readonly servicePreferences?: ServicePreferenceRecord;
+}
+
+/** @public */
+export interface AllowedResourceAccess {
+  readonly access: "allowed";
+  readonly basis: "declared-exception" | "explicit-consent";
+  readonly blockReasons: readonly [];
+  readonly resourceId: string;
+  readonly serviceId: string;
+}
+
+/** @public */
+export interface BlockedResourceAccess {
+  readonly access: "blocked";
+  readonly blockReasons: readonly AccessBlockReason[];
+  readonly resourceId: string;
+  readonly serviceId: string;
+}
+
+/** @public */
+export type EffectiveResourceAccess =
+  AllowedResourceAccess | BlockedResourceAccess;
+
+/** @public */
+export interface EffectiveAccessPlan {
+  readonly resources: readonly EffectiveResourceAccess[];
+}
+
+const REASON_ORDER: Readonly<Record<AccessBlockReason, number>> = Object.freeze(
+  {
+    "invalid-policy": 0,
+    "first-visit": 1,
+    "policy-change": 2,
+    withdrawn: 3,
+    expired: 4,
+    denied: 5,
+    "purpose-dependency": 6,
+    "service-preference": 7,
+    "privacy-signal": 8,
+  },
+);
+
+const NO_BLOCK_REASONS: readonly [] = Object.freeze([]);
+
+function orderedReasons(
+  reasons: ReadonlySet<AccessBlockReason>,
+): readonly AccessBlockReason[] {
+  return Object.freeze(
+    [...reasons].sort(
+      (left, right) => REASON_ORDER[left] - REASON_ORDER[right],
+    ),
+  );
+}
+
+function hasDependencyProblem(
+  purposeId: string,
+  purposes: ReadonlyMap<string, AccessPolicyPurpose>,
+  decisions: ReadonlyMap<string, AccessPurposeDecision>,
+  unresolved: boolean,
+  visiting: ReadonlySet<string> = new Set(),
+): boolean {
+  if (visiting.has(purposeId)) return !unresolved;
+
+  const purpose = purposes.get(purposeId);
+  if (!purpose) return !unresolved;
+
+  const nextVisiting = new Set(visiting);
+  nextVisiting.add(purposeId);
+
+  return purpose.dependsOn.some(
+    (dependencyId) =>
+      (unresolved
+        ? (decisions.get(dependencyId)?.decision ?? "unresolved") ===
+          "unresolved"
+        : decisions.get(dependencyId)?.decision !== "granted") ||
+      hasDependencyProblem(
+        dependencyId,
+        purposes,
+        decisions,
+        unresolved,
+        nextVisiting,
+      ),
+  );
+}
+
+function collectPurposeClosure(
+  purposeIds: readonly string[],
+  purposes: ReadonlyMap<string, AccessPolicyPurpose>,
+): ReadonlySet<string> {
+  const closure = new Set<string>();
+
+  function visit(purposeId: string): void {
+    if (closure.has(purposeId)) return;
+    closure.add(purposeId);
+    for (const dependencyId of purposes.get(purposeId)?.dependsOn ?? []) {
+      visit(dependencyId);
+    }
+  }
+
+  for (const purposeId of purposeIds) visit(purposeId);
+  return closure;
+}
+
+function addNarrowingReasons(
+  reasons: Set<AccessBlockReason>,
+  input: ResolveEffectiveAccessInput,
+  resource: AccessPolicyResource,
+): void {
+  if (
+    input.servicePreferences?.restrictedServiceIds.includes(resource.serviceId)
+  ) {
+    reasons.add("service-preference");
+  }
+
+  const restrictions = input.privacyRestrictions;
+  if (!restrictions) return;
+
+  const purposes = new Map(
+    input.policy.purposes.map((purpose) => [purpose.id, purpose]),
+  );
+  const purposeClosure = collectPurposeClosure(resource.purposeIds, purposes);
+  const purposeRestricted = restrictions.purposeIds.some((purposeId) =>
+    purposeClosure.has(purposeId),
+  );
+  if (
+    purposeRestricted ||
+    restrictions.resourceIds.includes(resource.id) ||
+    restrictions.serviceIds.includes(resource.serviceId)
+  ) {
+    reasons.add("privacy-signal");
+  }
+}
+
+function resolveOptionalReasons(
+  input: ResolveEffectiveAccessInput,
+  resource: AccessPolicyResource,
+): readonly AccessBlockReason[] {
+  const reasons = new Set<AccessBlockReason>();
+  const purposes = new Map(
+    input.policy.purposes.map((purpose) => [purpose.id, purpose]),
+  );
+  const decisions = new Map(
+    input.consent.decisions.map((decision) => [decision.purposeId, decision]),
+  );
+
+  if (!input.policy.valid) reasons.add("invalid-policy");
+  if (input.consent.status === "first-visit") reasons.add("first-visit");
+  if (input.consent.status === "withdrawn") reasons.add("withdrawn");
+  if (input.consent.status === "expired") reasons.add("expired");
+
+  if (resource.purposeIds.length === 0) reasons.add("invalid-policy");
+
+  for (const purposeId of resource.purposeIds) {
+    if (!purposes.has(purposeId)) {
+      reasons.add("invalid-policy");
+      continue;
+    }
+
+    const decision = decisions.get(purposeId)?.decision ?? "unresolved";
+    if (decision === "denied") reasons.add("denied");
+    if (decision === "unresolved" && input.consent.status !== "first-visit") {
+      reasons.add("policy-change");
+    }
+    if (hasDependencyProblem(purposeId, purposes, decisions, false)) {
+      reasons.add("purpose-dependency");
+    }
+    const dependencyIsUnresolved = hasDependencyProblem(
+      purposeId,
+      purposes,
+      decisions,
+      true,
+    );
+    if (dependencyIsUnresolved && input.consent.status !== "first-visit") {
+      reasons.add("policy-change");
+    }
+  }
+
+  addNarrowingReasons(reasons, input, resource);
+
+  return orderedReasons(reasons);
+}
+
+/**
+ * A resource that matches any of its purposes is judged once per purpose, as
+ * if it served that purpose alone, so a restriction on the resource or its
+ * service still closes every route. It is allowed when one route is; blocked,
+ * it carries every route's reasons.
+ */
+function resolveAnyOfReasons(
+  input: ResolveEffectiveAccessInput,
+  resource: AccessPolicyResource,
+): readonly AccessBlockReason[] {
+  if (resource.purposeIds.length === 0) {
+    return resolveOptionalReasons(input, resource);
+  }
+  const reasons = new Set<AccessBlockReason>();
+  for (const purposeId of resource.purposeIds) {
+    const route = resolveOptionalReasons(input, {
+      ...resource,
+      purposeIds: [purposeId],
+    });
+    if (route.length === 0) return NO_BLOCK_REASONS;
+    for (const reason of route) reasons.add(reason);
+  }
+  return orderedReasons(reasons);
+}
+
+type OptionalResourceRule = (
+  input: ResolveEffectiveAccessInput,
+  resource: Extract<AccessPolicyResource, { readonly access: "optional" }>,
+) => readonly AccessBlockReason[];
+
+const resolveMatchedReasons: OptionalResourceRule = (input, resource) =>
+  resource.purposeMatch === "any"
+    ? resolveAnyOfReasons(input, resource)
+    : resolveOptionalReasons(input, resource);
+
+function resolveResource(
+  input: ResolveEffectiveAccessInput,
+  resource: AccessPolicyResource,
+  optionalReasons: OptionalResourceRule,
+): EffectiveResourceAccess {
+  const reasons =
+    resource.access === "declared-exception"
+      ? (() => {
+          const exceptionReasons = new Set<AccessBlockReason>(
+            input.policy.valid &&
+              typeof resource.exceptionReason === "string" &&
+              resource.exceptionReason.trim().length > 0
+              ? []
+              : ["invalid-policy"],
+          );
+          addNarrowingReasons(exceptionReasons, input, resource);
+          return orderedReasons(exceptionReasons);
+        })()
+      : optionalReasons(input, resource);
+
+  if (reasons.length > 0) {
+    return Object.freeze({
+      access: "blocked",
+      blockReasons: reasons,
+      resourceId: resource.id,
+      serviceId: resource.serviceId,
+    });
+  }
+
+  return Object.freeze({
+    access: "allowed",
+    basis:
+      resource.access === "declared-exception"
+        ? "declared-exception"
+        : "explicit-consent",
+    blockReasons: NO_BLOCK_REASONS,
+    resourceId: resource.id,
+    serviceId: resource.serviceId,
+  });
+}
+
+/**
+ * The optional purposes the decision permits now: each one a resource bound to
+ * that purpose alone would be allowed to use, in policy order.
+ *
+ * @internal
+ */
+export function resolvePermittedPurposes(
+  input: ResolveEffectiveAccessInput,
+): readonly string[] {
+  return Object.freeze(
+    input.policy.purposes
+      .map((purpose) => purpose.id)
+      .filter(
+        (purposeId) =>
+          resolveOptionalReasons(input, {
+            access: "optional",
+            id: "",
+            purposeIds: [purposeId],
+            serviceId: "",
+          }).length === 0,
+      ),
+  );
+}
+
+function resolvePlan(
+  input: ResolveEffectiveAccessInput,
+  optionalReasons: OptionalResourceRule,
+): EffectiveAccessPlan {
+  const resources = Object.freeze(
+    input.policy.resources
+      .map((resource) => resolveResource(input, resource, optionalReasons))
+      .sort((left, right) => compareStrings(left.resourceId, right.resourceId)),
+  );
+
+  return Object.freeze({ resources });
+}
+
+/** @public */
+export function resolveEffectiveAccess(
+  input: ResolveEffectiveAccessInput,
+): EffectiveAccessPlan {
+  return resolvePlan(input, resolveMatchedReasons);
+}
+
+/**
+ * The plan for a product whose resources each serve one purpose, where any
+ * and all are the same: it leaves out the any-of rule, so a compact bundle
+ * need not carry it. A resource that matches any is judged as all, the
+ * stricter rule.
+ *
+ * @internal
+ */
+export function resolveAllOfEffectiveAccess(
+  input: ResolveEffectiveAccessInput,
+): EffectiveAccessPlan {
+  return resolvePlan(input, resolveOptionalReasons);
+}

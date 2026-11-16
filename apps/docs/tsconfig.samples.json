@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "allowJs": false,
+    "baseUrl": ".",
+    "esModuleInterop": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "@opencookie-dev/astro": ["../../packages/adapters/astro/src/index.ts"],
+      "@opencookie-dev/core": ["../../packages/core/src/index.ts"],
+      "@opencookie-dev/core/application": [
+        "../../packages/core/src/application.ts"
+      ],
+      "@opencookie-dev/core/auto": ["../../packages/core/src/auto.ts"],
+      "@opencookie-dev/core/domain": ["../../packages/core/src/domain.ts"],
+      "@opencookie-dev/core/infrastructure": [
+        "../../packages/core/src/infrastructure.ts"
+      ],
+      "@opencookie-dev/next": ["../../packages/adapters/next/src/index.ts"],
+      "@opencookie-dev/nuxt": ["../../packages/adapters/nuxt/src/index.ts"],
+      "@opencookie-dev/nuxt/runtime": [
+        "../../packages/adapters/nuxt/src/runtime.ts"
+      ],
+      "@opencookie-dev/react": ["../../packages/adapters/react/src/index.ts"],
+      "@opencookie-dev/svelte": ["../../packages/adapters/svelte/src/index.ts"],
+      "@opencookie-dev/vanilla": [
+        "../../packages/adapters/vanilla/src/index.ts"
+      ],
+      "@opencookie-dev/vue": ["../../packages/adapters/vue/src/index.ts"],
+      "opencookie": ["../../packages/cli/src/index.ts"]
+    },
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2023",
+    "types": ["node"]
+  },
+  "include": ["samples/**/*.ts"]
+}

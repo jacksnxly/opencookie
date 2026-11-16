@@ -1,0 +1,75 @@
+---
+title: Expiry, policy changes, and withdrawal
+description: Re-prompt when a decision expires or its policy identity changes, and conservatively re-block on withdrawal.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+Each accepted, rejected, or granular decision receives `expiresAt` from the client's injected clock plus `consentDurationMs`. Initialization evaluates a restored record against the current clock. Refreshing at or after the deadline reports `expired`, opens preferences, and withholds optional resource access.
+
+<RunnableSample id="decision-lifecycle" title="consent-lifecycle.ts" />
+
+<Steps>
+1. Choose `consentDurationMs` as an explicit policy setting, not as an indefinite browser-storage default.
+2. On application startup, call `initialize()` before trusting restored state. Expiry and current policy identity are evaluated at that boundary.
+3. Keep the active deadline observable. The browser products do this automatically; a custom headless host calls `refresh()` when its scheduler reaches the deadline.
+4. Call `openPreferences()` from a persistent privacy-choices control. A visitor can revise a choice with `savePreferences()`, `acceptAll()`, or `rejectAll()`.
+5. Call `withdrawConsent()` for withdrawal. The runtime records a withdrawal decision, broadcasts denied projections, re-blocks declared optional resources, and deletes the storage they declare (see [block before consent](/recipes/pre-consent-blocking/)). A script that already ran cannot be unloaded, so once the withdrawal is stored, a tab that ran one reloads. It cannot undo network requests or vendor effects that already occurred.
+</Steps>
+
+The `bootstrapOpenCookie()` and classic-script auto products schedule a refresh for the active deadline and observe relevant page lifecycle events. The client publishes an expired snapshot whose effective access is already blocked, then reconciles browser controllers before broadcasting that projection. Declared resources are re-blocked before external broadcast callbacks observe expiry, without waiting for a reload. If reconciliation rejects, the broadcast remains pending. A later `refresh()` retries physical re-blocking first and broadcasts the same expiry transition only after enforcement succeeds. Expiry does not rewrite the visitor's stored decision.
+
+Browser products protect this lifecycle from system-clock correction. If a restored record's `withdrawnAt` or `decidedAt` is later than the current wall clock, OpenCookie uses that transition as a logical epoch floor and advances it with elapsed `performance.now()` time. The same logical clock drives decision commands and expiry refreshes. This keeps the controls actionable and lets expiry progress even while `Date.now()` remains behind the stored transition.
+
+The framework-neutral headless client does not own a timer because scheduling is a host concern. Call `refresh()` from the host scheduler and report rejected refreshes through the host's normal diagnostics. Use the same injected epoch clock for the client and scheduler. After initialization, raise its logical floor to the restored record's latest transition when necessary, and advance that floor using a monotonic duration source. A repeated `Math.max(Date.now(), recordTime)` clamp is insufficient because it does not progress until wall time catches up.
+
+## This tab
+
+When the visitor turns off a purpose in this tab and the decision is stored, the tab reloads if a script it ran is now blocked. That covers withdrawing, rejecting, and saving narrower choices. The reload is the enforcement: a running page cannot unload a script, and a reloaded one never starts it. Other open tabs adopt the decision in place and reload only when it blocks or revokes something that may already have run there.
+
+Some decisions do not reload the tab:
+
+- a first Reject all, and any grant;
+- turning off only frames, which are removed instead;
+- a decision that cannot be stored. It shows the failure and a retry, and the tab reloads once the retry is stored.
+
+An application that builds its own client and calls `mountOpenCookie()` reloads when its stored decision blocks a resource the last stored decision allowed.
+
+## Other open tabs
+
+A decision made in one tab is stored, and the site's other open tabs adopt it in place. They reload only when it blocks or revokes something that may already have run there, or when they cannot verify the stored record (another policy version, an unreadable record). A tab that only restores the stored decision reloads no other tab. A tab announces a decision only once storage confirms it, so the others never apply the choice it replaced. A tab that hears a decision before the stored write reaches it keeps adopting for up to two seconds. On the drop-in, `bootstrapOpenCookie()` and the framework bindings, a tab that reads a record it cannot take, such as one from another policy version, reloads at once. A tab mounted by `mountOpenCookie()` with its own client reloads when the two seconds end if it still holds a record it cannot take: a choice of its own that failed to store, or a record from another policy version; a choice of its own that is stored within the two seconds ends the wait without a reload. A store that stays unchanged, as another install's announcement leaves it, never reloads the tab.
+
+Every browser product announces a stored decision to the site's other tabs on the same origin. The classic-script auto product, the framework binding and `bootstrapOpenCookie()` also compare the stored decision when a page returns to view or is restored from the back-forward cache. That reaches a tab on another subdomain sharing the consent cookie, and a browser without `BroadcastChannel`. An application that builds its own client and calls `mountOpenCookie()` receives the same-origin announcement only. A tab of it on another subdomain applies the change on its next load.
+
+## A settings link and vendor bridges
+
+Any element with `data-oc-open-preferences` opens the choices when clicked, on every entry point including the one-line drop-in, and whenever it is added to the page. The click's default action is prevented, and closing the choices returns focus to the element.
+
+Once a decision is stored, a floating launcher in the bottom corner reopens the choices. A page with its own entry point can leave it out, so it covers nothing, by passing `launcher: false` to `bootstrapOpenCookie()`, `bootstrapOpenCookieFromHead()` or `mountOpenCookie()`. The launcher is then omitted while the page carries a `data-oc-open-preferences` element, and a decision made in the banner moves focus to that element. A page without one still shows the launcher, so the choices stay reachable. The check runs when the banner closes; the one-line drop-in always shows the launcher.
+
+Every entry point also dispatches `opencookie:change` on `document`:
+
+- once after the stored decision is restored, with `restored: true`;
+- then whenever the purposes the visitor permits change.
+
+Its `detail` holds `permitted` and `revoked` purpose IDs. A narrowing is announced as soon as the tab enforces it, before it is stored, so a bridge stops its vendor even when storing fails. A grant is announced once it is stored.
+
+A bridge starts or stops a vendor that OpenCookie does not load itself:
+
+<RunnableSample
+  id="vendor-bridge"
+  lang="html"
+  title="index.html"
+  display="template"
+/>
+
+- **Register it early.** Put the listener in a classic script before OpenCookie's, so it hears the restored decision.
+- **Apply the state on every event.** Treat the first event like any other, not only changes.
+- **What it cannot do.** Stopping a vendor with its own opt-out cannot recall what it already sent.
+
+A changed `policyVersion` or decision-surface digest is reconciled against verified policy history. With matching history, only affected grants and new purposes become unresolved while unaffected decisions carry forward. Without matching history, the runtime fails closed and keeps optional resources blocked. Use [policy versioning](/recipes/policy-versioning/) to configure the history contract.
+
+<Aside type="note" title="Withdrawal preserves evidence">
+Withdrawal does not erase the prior record. It creates a new revision with denied decisions and a withdrawal timestamp. The preference prompt closes after that explicit action, while the persistent privacy-choices control remains available.
+</Aside>

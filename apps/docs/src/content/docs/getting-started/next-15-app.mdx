@@ -1,0 +1,21 @@
+---
+title: Next 15 App Router
+description: Put OpenCookie behind a small client boundary in a Next.js 15 App Router app.
+---
+
+## Verified fresh-app workflow
+
+Create an empty directory, enter it, then run these exact commands in order. Keep the import alias quoted so the shell does not expand `*` before the scaffold receives it. Next.js 15 depends on `sharp`, and pnpm 11 rejects unreviewed dependency build scripts, so the second step allows `sharp`'s install script and nothing else.
+
+- Scaffold: `pnpm dlx create-next-app@15.5.9 . --ts --no-eslint --no-tailwind --app --empty --no-src-dir --no-turbopack --import-alias '@/*' --disable-git --skip-install --yes`
+- Approve builds: `node --input-type=module --eval 'import { writeFile } from "node:fs/promises"; await writeFile("pnpm-workspace.yaml", Buffer.from("YWxsb3dCdWlsZHM6CiAgInNoYXJwIjogdHJ1ZQo=", "base64"), { flag: "wx" });'`
+- Install: `pnpm install --no-frozen-lockfile`
+- Initialize: `npx --yes opencookie@0.4.1 init --yes`
+- Build: `pnpm build`
+- Serve: `pnpm start --hostname 127.0.0.1 --port 4173`
+
+Open `http://127.0.0.1:4173/` to inspect the production build and its initialized banner.
+
+Observed output (packed install check, 2026-11-14): Next.js 15.5.9 compiled, the production build exited 0, the production server answered, and the banner rendered and kept its consent across a navigation.
+
+The steps after initializing are the same as the [Next App Router](/getting-started/next-app/) guide.

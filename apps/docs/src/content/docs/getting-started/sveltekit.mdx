@@ -1,0 +1,47 @@
+---
+title: SvelteKit
+description: Provide one OpenCookie store through Svelte 5 context.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+## Verified fresh-app workflow
+
+Create an empty directory, enter it, then run these exact commands in order.
+
+- Scaffold: `pnpm dlx sv@0.17.0 create . --template minimal --types ts --no-add-ons --no-install`
+- Install: `pnpm install --no-frozen-lockfile`
+- Initialize: `npx --yes opencookie@0.4.1 init --yes`
+- Build: `pnpm build`
+- Serve: `pnpm preview --host 127.0.0.1 --port 4173`
+
+Open `http://127.0.0.1:4173/` to inspect the production build and its initialized banner.
+
+Observed output: Vite built both SSR and client output and exited 0. Adapter auto reported that it could not select a deployment adapter, while the documented preview command still returned HTTP 200.
+
+## Browser-verified result
+
+This exact production workflow was exercised from a clean storage state in a real browser. Before consent, `opencookie-demo.js` had zero requests and zero executions. Accept all persisted across a new navigation. Analytics was then denied with Save choices, consent was withdrawn, and a final navigation again produced zero demo requests and executions.
+
+The first two images below are current-surface captures from the corresponding rebuilt repository production fixture. They are separate from the fresh-app run described above.
+
+![SvelteKit consent banner before consent](/images/getting-started/sveltekit/banner-preconsent.png)
+
+![SvelteKit settings panel showing the optional category checkbox and Analytics purpose checkbox](/images/getting-started/sveltekit/preferences-open.png)
+
+![SvelteKit after withdrawal and a fresh navigation](/images/getting-started/sveltekit/withdrawal-reload-blocked.png)
+
+<Steps>
+1. Run the pinned unattended initializer in the SvelteKit application.
+   The initializer installs `@opencookie-dev/core`, `@opencookie-dev/svelte`, and `@opencookie-dev/vanilla`.
+2. The initializer creates `src/lib/OpenCookieProvider.svelte` and wraps the root layout. The context setup inside that generated provider follows this contract.
+
+   <RunnableSample id="sveltekit" title="src/svelte-opencookie.ts" />
+
+3. Read `getOpenCookieContext()` only below that provider. The adapter begins with the server snapshot and subscribes after mount.
+</Steps>
+
+Do not initialize storage from a server module or module singleton. Initialize the application-owned client in the browser lifecycle, then keep it stable across route changes.
+
+Follow [SSR, hydration, and CLS](/recipes/ssr-hydration-cls/) for the stable-host pattern.

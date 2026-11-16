@@ -1,0 +1,55 @@
+{
+  "name": "@opencookie-dev/vanilla",
+  "version": "0.4.0",
+  "description": "No-framework browser adapter for OpenCookie",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jacksnxly/opencookie.git",
+    "directory": "packages/adapters/vanilla"
+  },
+  "homepage": "https://opencookie.dev",
+  "bugs": {
+    "url": "https://github.com/jacksnxly/opencookie/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": [
+    "./dist/auto.iife.js"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "unpkg": "./dist/auto.iife.js",
+  "jsdelivr": "./dist/auto.iife.js",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./templates/*": "./templates/*"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown"
+  },
+  "dependencies": {
+    "@opencookie-dev/core": "workspace:^"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

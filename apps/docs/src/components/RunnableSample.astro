@@ -1,0 +1,46 @@
+---
+import { Code } from "@astrojs/starlight/components";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
+interface Props {
+  display?: "source" | "template";
+  id: string;
+  lang?: string;
+  title?: string;
+}
+
+const { display = "source", id, lang = "ts", title } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id)) {
+  throw new TypeError(`Invalid runnable sample identifier: ${id}`);
+}
+const sampleFile = path.resolve(process.cwd(), "samples", `${id}.sample.ts`);
+const source = await readFile(sampleFile, "utf8");
+const start = "// docs:display:start";
+const end = "// docs:display:end";
+const startIndex = source.indexOf(start);
+const endIndex = source.indexOf(end);
+if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+  throw new Error(`${id}.sample.ts does not contain a valid display region.`);
+}
+let code = source
+  .slice(startIndex + start.length, endIndex)
+  .replace(/^\s*\n/u, "")
+  .trimEnd();
+if (display === "template") {
+  const template = code.match(/String\.raw`([\s\S]*)`;?$/u);
+  if (!template) {
+    throw new Error(`${id}.sample.ts does not contain a String.raw template.`);
+  }
+  code = (template[1] ?? "").trim();
+}
+---
+
+<div class="oc-runnable-sample" data-runnable-sample={id}>
+  <div class="oc-runnable-sample__label">
+    <span aria-hidden="true"></span>
+    <strong>Verified sample</strong>
+    <small>typechecked + executed</small>
+  </div>
+  <Code code={code} lang={lang} title={title} />
+</div>

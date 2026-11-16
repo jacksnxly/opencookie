@@ -1,0 +1,54 @@
+---
+title: Consent you can inspect
+description: OpenCookie is a self-hosted, typed consent runtime with explicit enforcement.
+template: splash
+hero:
+  tagline: A self-hosted, typed consent runtime that blocks optional resources before choice and keeps the decision lifecycle observable.
+  actions:
+    - text: Start with your stack
+      link: /getting-started/plain-html/
+      icon: right-arrow
+    - text: Open the local lab
+      link: /playground/
+      variant: minimal
+      icon: puzzle
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+import RunnableSample from "../../components/RunnableSample.astro";
+import ConsentPlayground from "../../components/ConsentPlayground.astro";
+
+## A small runtime with hard boundaries
+
+<CardGrid>
+  <Card title="Denied until allowed" icon="lock">
+    Scripts and frames start inert. The effective decision activates declared
+    resources, not a hopeful timing convention.
+  </Card>
+  <Card title="One domain model" icon="seti">
+    React, Vue, Svelte, Next, Nuxt, Astro, and plain HTML bind to the same typed
+    core instead of copying consent rules.
+  </Card>
+  <Card title="A decision you can audit" icon="document">
+    Policy identity, transition events, persistence diagnostics, and optional
+    receipts are explicit outputs.
+  </Card>
+</CardGrid>
+
+OpenCookie construction is SSR-safe. Browser storage is read only when the host calls `initialize()`.
+
+<RunnableSample id="core-client" title="create-consent-client.ts" />
+
+## Try the decision lifecycle
+
+<ConsentPlayground />
+
+## Choose a route
+
+- Run a site: [create a site, publish a policy, and check that rejection worked](/operating/run-a-site/)
+- First installation: [initialize a supported application](/getting-started/)
+- No build step: [plain HTML self-hosting or a pinned CDN build](/getting-started/plain-html/)
+- Client applications: [React](/getting-started/react-vite/), [Vue](/getting-started/vue-vite/), or [SvelteKit](/getting-started/sveltekit/)
+- Server-rendered applications: [Next App Router](/getting-started/next-app/), [Next Pages Router](/getting-started/next-pages/), [Nuxt](/getting-started/nuxt/), or [Astro](/getting-started/astro/)
+
+OpenCookie is a technical tool, not legal advice. Your organization remains responsible for its policy, lawful basis, catalogue accuracy, retention, wording, and jurisdiction analysis.

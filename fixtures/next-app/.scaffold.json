@@ -1,0 +1,20 @@
+{
+  "fixture": "next-app",
+  "generator": "create-next-app",
+  "generatorVersion": "16.3.2",
+  "router": "app",
+  "command": "pnpm dlx create-next-app@16.3.2 fixtures/next-app --ts --eslint --no-tailwind --app --no-src-dir --no-react-compiler --import-alias @/* --no-agents-md --disable-git --skip-install --yes",
+  "scaffoldedAt": "2026-08-22",
+  "sources": [
+    "https://nextjs.org/docs/app/getting-started/installation",
+    "https://nextjs.org/docs/app/guides/content-security-policy",
+    "https://nextjs.org/docs/pages/guides/custom-server"
+  ],
+  "sourceAccessedAt": "2026-08-22",
+  "resolvedVersions": {
+    "create-next-app": "16.3.2",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  }
+}

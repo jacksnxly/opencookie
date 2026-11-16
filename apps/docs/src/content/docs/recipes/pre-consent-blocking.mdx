@@ -1,0 +1,71 @@
+---
+title: Block before consent
+description: Keep optional scripts inert until the effective decision grants access.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+The banner is not the enforcement boundary. Optional resources must be inert in the original HTML so they cannot disclose data while JavaScript is still booting.
+
+<Steps>
+1. Change an optional script's `type` to `text/plain`.
+2. Put its URL in `data-src`, then declare stable `data-oc-resource` and `data-oc-category` identifiers.
+3. Create one controller for each declared resource and pass it to the core reconciliation lifecycle.
+</Steps>
+
+<RunnableSample
+  id="blocked-script-markup"
+  lang="html"
+  title="index.html"
+  display="template"
+/>
+
+Despite the attribute name, `data-oc-category` identifies the purpose that controls the resource and must match a configured purpose ID. The original element must not contain `src`; otherwise the browser can fetch it before OpenCookie starts.
+
+<RunnableSample id="pre-consent-blocking" title="blocking.ts" />
+
+`bootstrapOpenCookie()` discovers this markup and creates its controllers automatically. Use `createBlockedScriptController()` directly only when a headless application owns the wider reconciliation lifecycle. The controller discovers matching nodes again on each lifecycle pass, so scripts inserted after a SPA route change can still be reconciled. Starting creates an executable clone. Stopping removes the clone and re-blocks future discovery, but it cannot reverse code execution or data already sent by a vendor.
+
+<Aside type="caution" title="Do not auto-classify production scripts">
+Heuristic scanners can miss routes and can break checkout or application boot. Treat scanner output as evidence for operator review, then declare each resource explicitly.
+</Aside>
+
+## A tag manager's container
+
+A tag manager's container serves several purposes, and the tags inside it decide what each one runs. List its purposes in `data-oc-category`, separated by spaces, and add `data-oc-match="any"`:
+
+<RunnableSample
+  id="tag-manager-markup"
+  lang="html"
+  title="index.html"
+  display="template"
+/>
+
+- The container loads when any one of its purposes is permitted. Each purpose is judged on its own, with its dependencies and any privacy signal, so a signal that restricts one purpose closes only that one. A restriction on the container itself still blocks it.
+- Several purposes without `data-oc-match="any"`, any other match value, or elements of one resource declared differently are refused and reported. The rest of the page still mounts.
+- The tags inside the container must check consent themselves. Map Google Consent Mode's signals to purposes with `purposeMapping`, as [signals](/recipes/signals/#a-tag-managers-container) shows, and configure the container's own consent checks.
+- When the visitor turns off one of the container's purposes but keeps another, the tab reloads once that decision is stored. The tags the container ran for that purpose cannot be unloaded, so the container starts again with only what is still permitted.
+- A `data-oc-stores` token can start with a purpose and `=`, such as `advertising=cookie:_gcl_au`. Turning that purpose off deletes it while the container stays allowed. Tokens without a purpose are deleted when the container is blocked.
+
+The one-line drop-in controls one purpose and takes no such container; use the programmatic bootstrap.
+
+## Delete what a resource stored
+
+A blocked script or frame can declare the cookies and Web Storage entries its vendor writes, with whitespace-separated `kind:name` tokens in `data-oc-stores`:
+
+- `kind` is `cookie`, `local` (localStorage) or `session` (sessionStorage);
+- a trailing `*` matches every name that starts with the rest.
+
+<RunnableSample
+  id="declared-storage-markup"
+  lang="html"
+  title="index.html"
+  display="template"
+/>
+
+Whenever the resource is blocked, OpenCookie deletes the declared entries it can see. That happens when the visitor withdraws or narrows their choice, and on each page load that does not grant the resource. It rewrites each declared cookie with `Max-Age=0` on every domain and path visible from the current URL. It skips the domains a browser refuses: a top-level label such as `com`, and the parts of an IP address. A multi-label public suffix such as `co.uk` is still written, because the runtime carries no suffix list; the browser refuses it, and Firefox logs that as a console error. A declared cookie that is still visible afterwards is reported as a failed cleanup. A malformed declaration also fails, rather than being skipped.
+
+Script can delete only what it can reach. HttpOnly cookies, third-party and partitioned cookies, cookies scoped to another path or subdomain, Secure cookies seen from an `http:` page, IndexedDB, Cache Storage and service workers are out of its reach; expire those on the server or in the vendor's own settings. Nothing can recall data that was already sent. Never declare OpenCookie's own decision key.
+
+When the site uses a nonce-based CSP, pass the same response nonce through the bootstrap so an activated clone receives it. See [strict CSP and nonce](/recipes/csp-nonce/).

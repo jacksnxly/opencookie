@@ -1,0 +1,52 @@
+---
+title: Nuxt
+description: Register the OpenCookie Nuxt module with an application-owned store factory.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+import RunnableSample from '../../../components/RunnableSample.astro';
+
+<Aside type="note" title="Nuxt 4">
+This guide uses the current Nuxt 4 starter. Nuxt 3 reached end of life on 31 July 2026 and no longer receives bug fixes or security patches, so the adapter now supports Nuxt 4 only. See the [Nuxt roadmap](https://nuxt.com/docs/4.x/community/roadmap), accessed 2026-09-23.
+</Aside>
+
+## Verified fresh-app workflow
+
+Create an empty directory, enter it, then run these exact commands in order. pnpm 11 rejects unreviewed dependency build scripts, so create the narrow allowlist after scaffolding and before installing. The file permits only Nuxt's required `esbuild` setup.
+
+- Scaffold: `pnpm dlx create-nuxt@3.37.0 . --template minimal --force --packageManager pnpm --no-install --gitInit=false`
+- Approve builds: `node --input-type=module --eval 'import { writeFile } from "node:fs/promises"; await writeFile("pnpm-workspace.yaml", Buffer.from("YWxsb3dCdWlsZHM6CiAgImVzYnVpbGQiOiB0cnVlCg==", "base64"), { flag: "wx" });'`
+- Install: `pnpm install --no-frozen-lockfile`
+- Initialize: `npx --yes opencookie@0.4.1 init --yes`
+- Build: `pnpm build`
+- Serve: `node .output/server/index.mjs`
+
+Set `HOST=127.0.0.1` and `PORT=4173` in the environment when you run that serve command. Nuxt otherwise listens on port 3000, which is the one address in this guide set that would differ from every other framework page. Then open `http://127.0.0.1:4173/` to inspect the production build and its initialized banner.
+
+Observed output: on 2026-09-23 the packed fresh-app run built the Nuxt 4 app, the production build exited 0, and the Node server answered. In Chromium the banner rendered and a decision persisted across a navigation, and a second initialization changed nothing.
+
+## Browser-verified result
+
+The fresh-app run above is the browser evidence for this workflow: the banner rendered, and a decision persisted across a navigation. The images below are captures from the repository's Nuxt production fixture, not from that fresh app.
+
+![Nuxt consent banner before consent](/images/getting-started/nuxt/banner-preconsent.png)
+
+![Nuxt settings panel showing the optional category checkbox and Analytics purpose checkbox](/images/getting-started/nuxt/preferences-open.png)
+
+![Nuxt after withdrawal and a fresh navigation](/images/getting-started/nuxt/withdrawal-reload-blocked.png)
+
+<Steps>
+1. Run the pinned unattended initializer in the Nuxt project.
+   The initializer installs `@opencookie-dev/core`, `@opencookie-dev/nuxt`, and `@opencookie-dev/vanilla`.
+2. Review the module registration. The initializer also writes `opencookie-store.ts` with a default store factory and a client-only banner plugin.
+
+   <RunnableSample id="nuxt" title="nuxt.config.ts" />
+
+3. Read `useNuxtApp().$openCookie` or the typed OpenCookie composables from components. Do not construct a shared store at module scope on the server.
+</Steps>
+
+<Aside type="caution" title="Blocked scripts in the document head">
+If you declare a blocked resource in `app.head` and your server gives each response its own CSP nonce, Nuxt 4 inserts the tag a second time on hydration: browsers hide a nonce from scripts, so Nuxt cannot match the server-rendered tag. The resource would then run twice after consent. Render such tags on the server only, with `useHead` inside `if (import.meta.server)`, as this repository's Nuxt fixture does. See [unjs/unhead#136](https://github.com/unjs/unhead/issues/136), accessed 2026-09-23.
+</Aside>
+
+The supported range is `>=4.5.2 <5.0.0`. The store module is registered as `~~/opencookie-store`, the project root, because Nuxt 4 resolves `~` to the `app/` directory.

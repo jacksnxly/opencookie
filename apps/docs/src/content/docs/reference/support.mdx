@@ -1,0 +1,109 @@
+---
+title: Support policy and boundaries
+description: Runtime, framework, and legal boundaries for OpenCookie consumers.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+## Runtime model
+
+- `@opencookie-dev/core` has zero runtime dependencies and targets modern ESM and CommonJS consumers.
+- Framework adapters are thin bindings over the same external-store and domain contracts.
+- Svelte and Nuxt packages are ESM-only because their current framework toolchains are ESM-native.
+- The vanilla package also provides an IIFE browser build for pinned CDN or self-hosted use.
+
+## Framework range
+
+The package manifest is authoritative for peer dependency ranges. A framework major that has reached upstream end of life is dropped rather than kept untested: the [Nuxt adapter](/getting-started/nuxt/) supports Nuxt 4 only, because Nuxt 3 reached end of life on 31 July 2026.
+
+## Security and privacy boundary
+
+OpenCookie can represent configured choices, block declared browser resources, broadcast configured signals, and emit evidence. It cannot determine whether your policy, lawful basis, exception, text, retention, vendor behavior, or jurisdiction analysis is correct.
+
+<Aside type="danger" title="Not legal advice">
+  OpenCookie is a technical tool, not legal advice, a certified CMP, or a
+  compliance guarantee. Review your configuration and rendered behavior with
+  qualified legal and accessibility specialists.
+</Aside>
+
+## Declared resource exceptions
+
+`defineResourcePolicy()` requires every `declared-exception` resource to include a nonblank `exceptionReason`. OpenCookie preserves that authored reason in `runtime.accessPolicy`. The vanilla settings panel lists the resource ID and reason under **Not controlled by these choices**, without a checkbox, because changing an optional-purpose choice does not control that resource.
+
+This declaration records operator configuration. OpenCookie does not determine whether the resource is necessary, whether its legal basis is valid, or whether the reason is complete. Use neutral, specific wording and have the deployed classification reviewed for the site and jurisdiction.
+
+`bootstrapOpenCookie()` builds its resource policy from blocked scripts and iframes, all optional, plus any `declaredExceptions` you pass, each with an `id` and an `exceptionReason`. A declared exception has no markup: it runs as the page loads it, and OpenCookie lists it without enforcing it. An exception identifier shared with blocked markup, or a blank reason, is refused before anything mounts. The one-line drop-in takes no declared exceptions; use the programmatic bootstrap for them.
+
+## Measured cold-start cost
+
+The drop-in starts in four short tasks rather than one long one. The first
+claims the page and sends the Google Consent Mode default. The second builds
+the runtime's factory, the third its runtime, and the last mounts the bar.
+
+The project measures this on its own performance profile: a 390 by 844 mobile
+viewport with a 4x CPU slowdown and a throttled network, loading the plain-HTML
+fixture in a cold browser. When the four-task start was introduced, its longest
+task measured about 28 ms, under the 50 ms long-task budget. For the 0.2.1
+release, the gate `pnpm verify:performance` recorded no long task and a mean
+Total Blocking Time of 0 ms across its cold runs. On unthrottled desktop hardware the same work is a small fraction of
+that.
+
+The cost falls on the first execution in a cold browser process. Once the
+browser has the script in its code cache, later loads cost less. If a long task
+on first paint matters for your site, measure the drop-in on your own hardware
+and pages. The programmatic entry points let you control when the runtime
+initializes.
+
+## Browser support
+
+The release gates run the pinned Chromium, Firefox and WebKit builds that
+Playwright ships, at desktop and mobile viewports. Older engines are not
+tested. The packages and the drop-in are compiled for ES2022, and use built-ins
+such as
+[`Object.hasOwn`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/hasOwn#browser_compatibility),
+[`Array.prototype.at`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at#browser_compatibility)
+and
+[`HTMLDialogElement.showModal()`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal#browser_compatibility).
+A browser without them does not run OpenCookie.
+
+<Aside type="caution" title="What an unsupported browser does">
+  Declared optional scripts and frames stay inert, so blocking fails closed. But
+  OpenCookie sends no Consent Mode default either. If your site loads Google
+  tags outside OpenCookie (Advanced Consent Mode), such a browser runs them
+  without a denied default. Blocking those tags as declared resources (Basic
+  mode) keeps them from running at all.
+</Aside>
+
+## IAB TCF is not supported
+
+OpenCookie 1.0 does not implement the IAB Transparency and Consent Framework. If
+your advertising stack requires a TCF string, OpenCookie alone will not provide
+one.
+
+This is deliberate rather than unfinished. TCF couples protocol encoding to
+policy text, vendor-list versions, CMP registration and certification, and those
+last two are organizational steps a library cannot perform on your behalf. A
+partial implementation would be worse than none: vendors detect a CMP by the
+presence of `__tcfapi`, so a stub would be read as a real consent signal and
+acted on, leaving a site that looks answered to the vendor while nothing
+meaningful was negotiated.
+
+So OpenCookie installs no `__tcfapi` and exports nothing TCF-shaped, and a test
+enforces that absence. Everything else keeps working: blocking before consent,
+the decision record, withdrawal, and Google Consent Mode signals are unaffected.
+
+If you need TCF, supply a certified CMP for that surface, or implement the
+versioned optional port. Current IAB state at the time of
+writing: v2.2 is legacy, v2.3 is the mandatory production protocol, and v2.4 has
+a stated web transition deadline of 2026-10-23. Recheck the IAB sources rather
+than trusting this paragraph's date.
+
+<Aside type="caution">
+  Supporting TCF would not make a site compliant, and not supporting it does not
+  make a site non-compliant. OpenCookie is a technical tool and does not
+  determine your obligations.
+</Aside>
+
+## Release boundary
+
+This repository builds the site locally. It contains no deploy job, DNS operation, remote runtime dependency, or mandatory hosted control plane.

@@ -1,0 +1,706 @@
+---
+title: Command line
+description: Publish, inspect, and roll back an OpenCookie policy from a terminal.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import RunnableSample from "../../../components/RunnableSample.astro";
+
+The `opencookie` command initializes a project and manages the published policy
+history for that project, or for each of several sites it manages.
+
+## Policy publication
+
+A published policy is recorded in an append-only history at
+`opencookie/policy-publications.json`, relative to the project directory. Every
+command below accepts `--cwd <directory>` to target a project other than the
+current one.
+
+### Start from a policy you can publish
+
+Run `opencookie policy starter`. It writes `opencookie/policy.json`: a complete
+policy with one necessary purpose, one optional purpose, and plain language for
+every identifier a declaration shows a visitor. Publishing accepts it as it
+stands, so a new site reaches a live policy in three commands:
+
+| Step            | Command                                                                                |
+| --------------- | -------------------------------------------------------------------------------------- |
+| Create the site | `opencookie sites add --name shop --domain shop.example.com`                           |
+| Write a policy  | `opencookie policy starter --site shop`                                                |
+| Publish it      | `opencookie policy publish --site shop --id 2026-09-a --policy opencookie/policy.json` |
+
+Edit the wording before you publish: the starter describes what a typical site
+does, not what yours does. An existing file is never overwritten; pass `--out`
+to write somewhere else.
+
+<Aside type="note">
+  With `--site`, a path under `opencookie/` already means that site's own
+  directory, which is why the third command says `opencookie/policy.json` and
+  not the longer path on disk. Writing the longer path is refused, with the
+  shorter one named.
+</Aside>
+
+### Inspect what is live
+
+Run `opencookie policy status`. It prints the current publication and its policy version, or reports that no policy
+is published.
+
+### Preview a policy before publishing
+
+Run `opencookie policy preview --policy next-policy.json`. It validates the
+candidate exactly as publishing would, prints the purposes a visitor would be
+shown with their labels and disclosures, and then says how they differ from the
+live publication: what the candidate adds, removes, or changes.
+
+A change is measured on what a visitor reads, not on the stored document, so
+rewording a disclosure is reported as a change while a rewritten catalogue that
+says the same things is not.
+
+Preview writes nothing at all. A candidate that is not a readable policy
+document is refused with the same reason publishing would give. If a purpose
+shows its identifier where a label should be, no plain-language terms are
+declared for it yet.
+
+Each category heading shows the category's `label`, or its identifier when it
+has none. A policy in several languages also prints each category's and each
+purpose's translations, one line per language, and a reworded or added
+translation is reported as a change. See
+[one policy in several languages](/recipes/a11y-i18n-theming/#one-policy-in-several-languages).
+
+### Publish a policy
+
+Run `opencookie policy publish --id 2026-03-release --policy policy.json`.
+
+A publication id is a plain identifier: letters, digits, `.`, `_` and `-`, starting with a letter or digit, at most 128 characters. It is written into the generated policy module, so anything else is refused.
+
+`--policy` names a JSON document with three required fields:
+
+| Field               | Meaning                                                                   |
+| ------------------- | ------------------------------------------------------------------------- |
+| `catalogueRevision` | The catalogue revision this policy belongs to, such as `catalogue-v1`.    |
+| `policyVersion`     | The operator's version for this policy, such as `version-one`.            |
+| `policy`            | The policy itself, carrying `purposes` and the reference lists they cite. |
+
+`--id` is the identifier recorded for this publication. It must not repeat an
+identifier already present in the history.
+
+### Install the published policy into the project
+
+Run `opencookie policy install`. It writes `opencookie.policy.ts` from the
+publication that is currently live, so the runtime enforces the policy you
+published rather than the starter one `opencookie init` wrote. Use `--out` when
+the project keeps that module elsewhere.
+
+The published definition is embedded exactly as it was published, not rebuilt
+from parts, and the module exports the `policyVersion` and `catalogueRevision`
+that the generated configuration reads. A consent duration the project already
+set is kept; a project that has none is given the six-month default. Everything
+else in the file is generated, and the file says so.
+
+Installing with nothing published is refused, as is installing over a
+publication history that fails its integrity check. Two more refusals leave the
+project unchanged:
+
+- The generated `opencookie.config.ts` binds resources to purposes by id. A
+  publication that does not declare one of them would make the configuration
+  throw when the application loads, so install names the missing purposes and
+  writes nothing. Publish a policy that declares them, or change the resources
+  in the configuration.
+- A plain-HTML page runs the drop-in, which enforces the one purpose its
+  `data-oc-*` attributes describe and never loads a policy module. OpenCookie
+  cannot yet install a published policy into such a page, so install says what
+  the page still enforces and writes nothing.
+
+### Install for a site that bundles its own integration
+
+A site that builds its own runtime with `bootstrapOpenCookie()` from
+`@opencookie-dev/vanilla` does not import the TypeScript module. Give `--out` a
+path ending in `.json`, for example
+`opencookie policy install --out src/opencookie-policy.json`, and install writes
+the live publication as JSON instead:
+
+| Field                   | What it holds                                                          |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `generatedBy`           | `opencookie policy install`, so the file is recognised as generated.   |
+| `publicationId`         | The live publication the file was written from.                        |
+| `site`                  | The site it belongs to, when the project manages several.              |
+| `policyVersion`         | The published policy version.                                          |
+| `catalogueRevision`     | The published catalogue revision.                                      |
+| `catalogueDigest`       | The catalogue digest recorded when the policy was published.           |
+| `decisionSurfaceDigest` | The decision-surface digest recorded when the policy was published.    |
+| `policy`                | The published policy definition, exactly as `definePolicy` accepts it. |
+
+Import the file in the site's own code and pass it to the bootstrap as
+`bootstrapOpenCookie({ installedPolicy })`, or to
+`bootstrapOpenCookieFromHead()`. The bootstrap derives both digests again from
+`policy` and throws before mounting when either differs from the recorded one,
+so a file edited or replaced after install never runs: nothing mounts and every
+declared resource stays inert. `installedPolicy` cannot be combined with
+`policyDefinition`, `policyVersion` or `catalogueRevision`.
+
+Because the runtime reads the recorded digests, the site's bundler keeps them in
+the built file, where `opencookie doctor --bundle` can find them. The same
+refusals apply as for the module: install replaces only a JSON file it wrote,
+never one that merely mentions the command, and never another site's.
+
+### Roll back to an earlier publication
+
+Run `opencookie policy rollback --id 2026-03-rollback --to 2026-02-release`.
+
+Rollback never rewrites history. It appends a new publication that carries the
+restored policy, with the plain-language terms and lawful bases published beside
+it, and records which publication it restored, so the sequence stays auditable.
+
+A rollback made with the CLI before 0.3.0 carried the policy without its terms,
+so the declaration showed bare identifiers. Roll back again to the same
+publication to restore them.
+
+### Generate the public cookie declaration
+
+Run `opencookie policy declaration --out public/cookies.json`. It renders the live publication as a declaration document and writes it to
+`opencookie/cookie-declaration.json` unless `--out` names another path. The
+document lists every disclosed purpose grouped into its presentation section,
+with the providers, recipients, data categories, processing operations, and
+retention identifiers the policy declares.
+
+It also carries the publication identifier, the policy version, and both policy
+digests, so a reader can tell exactly which published policy the declaration
+describes rather than assuming it is current. Regenerating after a publication
+or rollback overwrites the document in place.
+
+## Findings
+
+Observed cookies, storage, scripts, iframes, beacons, and network destinations
+enter through an import boundary. They are recorded as evidence of what an
+observer saw. They never become policy truth on their own.
+
+### Import observations
+
+Run `opencookie findings import --from observations.json`.
+
+The document is a JSON list of observations, each an object with these fields:
+
+| Field         | Example                    |
+| ------------- | -------------------------- |
+| `kind`        | `cookie`                   |
+| `name`        | `_ga`                      |
+| `uncertainty` | `observed`                 |
+| `browser`     | `chromium-141`             |
+| `source`      | `https://example.test/`    |
+| `trigger`     | `page-load`                |
+| `observedAt`  | `2026-09-21T10:00:00.000Z` |
+
+`kind` is one of `beacon`, `cookie`, `iframe`, `network-destination`, `script`,
+or `storage`. `uncertainty` is `observed`, `inferred`, or `uncertain`, and it
+records how much the observer vouches for the finding.
+
+An import is all or nothing. One malformed observation refuses the whole batch
+and leaves the inventory untouched, so a partial import can never be mistaken
+for a complete one. Seeing the same resource again records another observation
+on the existing finding rather than replacing the earlier evidence.
+
+### Scan a page
+
+Run `opencookie findings scan --html page.html --page https://example.com/`
+against a page you have saved. It lists the external resources that page's HTML
+declares and records each one as an unclassified finding, through the same
+all-or-nothing path as an import. `--page` is the address the HTML came from, so
+relative links resolve correctly; it must be `http` or `https`.
+
+| Found                                                                       | Recorded as           | Certainty   |
+| --------------------------------------------------------------------------- | --------------------- | ----------- |
+| A script with `src`, or `data-src` when OpenCookie holds it back            | `script`              | `inferred`  |
+| An iframe, or OpenCookie's `<template data-oc-iframe data-src>` placeholder | `iframe`              | `inferred`  |
+| A `preconnect` or `dns-prefetch` link                                       | `network-destination` | `inferred`  |
+| A stylesheet or preloaded font on another origin                            | `network-destination` | `inferred`  |
+| An image declared as 1 by 1 pixel, including inside `noscript`              | `beacon`              | `uncertain` |
+
+<Aside type="caution">
+  A scan reads markup; it does not run the page. It cannot see cookies, Web
+  Storage writes, or anything JavaScript adds at runtime, so nothing it finds is
+  ever marked `observed`. Stylesheets and preloaded fonts from another origin
+  are reported, because fetching them sends a visitor's address to their
+  provider; fonts pulled in by `@import` or `@font-face` inside CSS are not yet.
+  Treat a scan as a starting inventory, not a complete one.
+</Aside>
+
+### Import a recorded session
+
+A page's markup only shows what it declares. To see what a visit actually did,
+record the visit in a browser and import it: open developer tools, reload the
+page, exercise the site, then export an HTTP Archive (`.har`) and run
+`opencookie findings session --har session.har`. It prints how many findings the
+recording added and how many in the inventory are still unclassified.
+
+Everything it reports happened, so each finding is `observed`:
+
+| Seen in the recording                      | Recorded as           |
+| ------------------------------------------ | --------------------- |
+| A cookie returned in a response            | `cookie`, by name     |
+| A JavaScript response                      | `script`              |
+| A request sent with `navigator.sendBeacon` | `beacon`              |
+| A document loaded inside the page          | `iframe`              |
+| Any other request to another origin        | `network-destination` |
+
+Requests back to the site's own origin that are not scripts are left out: a site
+fetching its own pages is not by itself a consent concern, and reporting every
+one would bury the findings that are. The browser that made the recording is
+kept with each finding, and a recording that does not name one says `unknown`
+rather than borrowing a name.
+
+If the export does not name a browser, which happens when developer tools record
+the inspector rather than the browser, add `--browser "Safari 26.0"`. A
+recording that names its own browser cannot be relabelled: the command refuses
+rather than let a finding claim a browser it never ran in.
+
+Playwright writes one `pages` entry per tab, so OpenCookie reads every later
+navigation in that tab as a page in its own right. When you name a recording's
+browser with `--browser`, use the browser's name with or without its version.
+
+Beacons and embedded documents are recognised from the resource type the
+recording carries. Chromium calls a `sendBeacon` request `ping` while WebKit and
+Firefox call it `beacon`, and OpenCookie reads both. A recording that carries no
+resource type at all loses nothing: those requests are still reported, as
+`network-destination`.
+
+<Aside type="caution">
+  A recording shows what reached the network. It cannot show Web Storage,
+  because those writes never leave the browser. It is also one session, in one
+  browser, on the routes you exercised.
+</Aside>
+
+### Read what the browser stored
+
+Neither a markup scan nor a recording can see Web Storage: those writes never
+reach the network. Read it in the browser instead. With the site open and
+exercised, paste this into the developer console, which copies a snapshot to the
+clipboard:
+
+<RunnableSample
+  id="storage-snapshot"
+  lang="js"
+  title="developer console"
+  display="template"
+/>
+
+Save it and run
+`opencookie findings storage --from storage.json --browser "Safari 26.0"`.
+
+Every key becomes an `observed` finding named for its store, `local:` or
+`session:`, so one key name in both stores stays two findings with different
+lifetimes. The browser is given on the command line, not guessed, because a
+finding records where it was seen and a snapshot cannot name a browser for
+itself. A snapshot with no page, a page that is not a web address, entries that
+are not key names, or no keys at all is refused, and nothing is imported.
+
+<Aside type="caution">
+  This is what one browser profile held at one moment, on the routes you
+  exercised. It is not everything the site can write.
+</Aside>
+
+### Check what a rejected session still loaded
+
+Reject everything optional, record that visit, then run
+`opencookie findings check --har rejected.har`.
+
+It compares the recording with your decisions and separates two things. A
+resource you classified as optional that still reached the network is reported
+as `loaded after rejection`, and the command exits non-zero: that is a failure
+of enforcement, not a finding to classify. A resource with no decision is
+reported as `not decided` and also fails the command: it may be a vendor added
+since the last review, so the recording cannot show that rejection worked until
+you classify it, necessary or optional.
+
+A cookie entry whose name is not an RFC 6265 cookie name is not imported. The
+command names each one as `skipped`. WebKit's recorder can split one
+`Set-Cookie` header at the comma in its date and file the rest as a cookie.
+
+A necessary resource is expected to load and is not reported.
+
+A site's own requests, other than scripts, are left out of an import, since a
+site fetching its own pages is not by itself a consent concern. A first-party
+relay that forwards a vendor's events through the site's own origin is one,
+though. Import it with `opencookie findings session --har visit.har --same-origin`,
+which keeps every same-origin request, and classify the relay's path, with
+`--match` if it varies. `findings check` reads same-origin requests too, and
+reports one only when a decision covers it: a relay decided optional that
+received traffic after rejection fails the check, and the site's own undecided
+requests never do.
+
+A resource is matched by its origin and path, so a tag whose query string is
+cache-busted between visits is still the resource you decided about. A different
+path is a different resource. The inventory stores each address, and each page it
+was seen on, without its query string or fragment. Those can carry a token, an
+e-mail address or a visitor ID, and a project may commit the inventory.
+`findings classify --name` accepts the address with or without its query
+string.
+
+A recording made by Playwright names each page by its title rather than its
+address. The first document recorded for a page is then taken as the page's
+address, so a later navigation in the same session is a page, not an embedded
+frame.
+
+Some loaders put the changing part in the path itself, such as
+`/include/1727300000/loader.js`. Declare that part when you classify the finding,
+with `--match https://cdn.example/include/*/loader.js`: `*` stands for any text
+within one path segment. The origin stays literal, at least one segment stays
+literal, and the pattern must cover the finding it decides, or the command
+refuses it. `check` then matches later addresses through the pattern.
+
+<Aside type="caution">
+  This reads one recording of one session in one browser. It is evidence of what
+  happened, not proof of what always happens.
+</Aside>
+
+### Classify a finding
+
+A decision records everything a visitor is later told about a resource, so the
+command asks for all of it at once:
+
+| Part       | Flag                            | Meaning                                                  |
+| ---------- | ------------------------------- | -------------------------------------------------------- |
+| Purpose    | `--purpose analytics`           | The purpose the resource serves.                         |
+| Vendor     | `--vendor google-llc`           | Who supplies it. Becomes a provider in the policy.       |
+| Service    | `--service google-analytics`    | The named service the data reaches. Becomes a recipient. |
+| Categories | `--category usage-data`         | What is processed. Repeat the flag for more than one.    |
+| Disclosure | `--disclosure "Counts visits."` | Plain language a visitor reads.                          |
+| Retention  | `--retention thirteen-months`   | How long the data is kept.                               |
+| Cleanup    | `--cleanup reblocked`           | What happens when consent is withdrawn.                  |
+| Necessary  | `--necessary`                   | Claims the resource as a necessary exception.            |
+| Match      | `--match <pattern>`             | Optional. Also covers addresses whose path varies.       |
+
+A missing part is named, not guessed: the command lists exactly which flags it
+still needs and writes nothing. Classifying a finding that was never observed is
+refused, so a decision always attaches to real evidence. A disclosure is
+required even with `--necessary`, because a resource set without asking is one
+a visitor can still expect to be told about.
+
+`--cleanup` takes one of three values, and OpenCookie refuses any other:
+
+- `reblocked` is what the runtime does by itself. It stops the resource and
+  removes what it injected.
+- `deleted` says what the resource stored is also erased whenever it is blocked.
+  Declare it with `data-oc-stores` on the blocked script or frame (see
+  [block before consent](/recipes/pre-consent-blocking/)), or erase it in your own
+  resource controller. Script cannot reach HttpOnly or third-party cookies.
+- `expires` says nothing is erased and the stored data runs out on its own.
+
+Revising a decision replaces only the decision. The observations that produced
+the finding are preserved, so the record of what was actually seen stays intact.
+An inventory holding a decision that is missing any of these parts is refused
+rather than listed with them blank.
+
+### List findings
+
+Run `opencookie findings list`. It prints every finding with its classification, its uncertainty, and each sighting
+with the time, page, trigger, and browser that produced it.
+
+<Aside type="caution">
+  Every imported finding is `unclassified`. Discovery is probabilistic and
+  route, browser, state, and session dependent, so an operator decides what each
+  finding means before it can appear in a policy.
+</Aside>
+
+### Draft a policy from classified findings
+
+Run `opencookie findings draft-policy --out opencookie/policy-draft.json`. It
+groups the findings an operator has classified into the purposes those decisions
+imply, and writes a scaffold.
+
+The draft carries what the decisions supply: the disclosures, data categories,
+providers, recipients and retentions of every finding under that purpose,
+collected without duplication.
+
+A draft is still not a policy. It always reports `"publishable": false`, and
+lists what no decision can supply, which is a label a visitor reads and the
+operations the purpose covers. The summary names what the draft itself is
+missing, so it never asks for something already decided. Findings that are still
+unclassified are listed separately as excluded, so nothing disappears silently.
+
+## Say what the identifiers mean
+
+A catalogue identifier is written for you, not for a visitor. A declaration that
+reads `usage-data` and `thirteen-months` has the same buttons as a good one and
+tells a reader nothing, so OpenCookie makes you supply plain language:
+
+Add a `terms` object to the policy document, beside `policy`. Each key is a
+catalogue identifier and each value carries a `label` and an optional
+`description`. For a policy citing `analytics`, `processing`, `site-operator`,
+`thirteen-months` and `usage-data`, a complete glossary gives `analytics` the
+label `Understand how the site is used`, `thirteen-months` the label
+`Thirteen months`, and `usage-data` the label `How you use the site` with the
+description `Pages you opened and what you clicked.`
+
+The declaration then carries `dataCategories`, `operations`, `providers`,
+`recipients` and `retentions` as resolved entries with a `label` and optional
+`description`, alongside the original identifier arrays.
+
+`terms` is all-or-nothing. If you supply it, it must cover every identifier the
+policy references, and publishing is refused otherwise with the missing ones
+named, for example: `policy.json has no plain-language term for "processing",
+"site-operator", "thirteen-months", "usage-data". A declaration must not show a
+visitor a bare identifier.`
+
+A term for an identifier the policy never references is refused too, so a
+glossary cannot quietly drift away from the policy it describes. Terms are
+re-checked when the store is read.
+
+A category is not a term. A term naming a category's identifier is refused with
+the place its heading belongs: the category's `label` in the policy, with
+`translations` for each further language. The published declaration carries
+each section's `categoryLabel` and `categoryTranslations`, and each purpose's
+`translations`, when the policy declares them.
+
+Omitting `terms` entirely still publishes, because a project part-way through
+setup is not broken. `opencookie doctor` reports it as
+`declaration-without-plain-language` so it does not go unnoticed.
+
+<Aside type="note">
+  Terms are presentation only. They live beside the policy, never inside it, so
+  two publications differing only in wording have the same
+  `decisionSurfaceDigest` and `catalogueDigest`. You can correct a label without
+  reprompting anyone.
+</Aside>
+
+## Declare a lawful basis
+
+A policy document may record the basis an operator asserts for each purpose,
+beside the policy rather than inside it:
+
+Add a `lawfulBases` object to the policy document, beside `policy` rather than
+inside it. Each key is a purpose identifier and each value is the basis the
+operator asserts, so a policy whose purposes include `analytics` might record
+`"analytics": "legitimate-interest"`.
+
+`opencookie policy declaration` copies each basis into the published declaration
+verbatim, as `lawfulBasis` on the purpose it belongs to.
+
+Three properties are deliberate, and each is covered by a test:
+
+- **Nothing is inferred.** A purpose with no declared basis gets none. An absent
+  basis means the operator stated nothing, not that consent applies.
+- **A basis never changes enforcement.** It is stored outside the policy, so two
+  publications differing only in their bases produce an identical
+  `decisionSurfaceDigest` and `catalogueDigest`. Declaring
+  `legitimate-interest` does not exempt anything from a consent decision, and
+  terminal storage is still gated by what the visitor chose.
+- **A basis must refer to a real purpose.** One naming a purpose the policy does
+  not define is refused, and the message names that purpose rather than calling
+  the whole document unreadable. A blank basis is refused too, instead of
+  recording a legal claim with no content.
+
+<Aside type="caution">
+  A lawful basis is the operator's assertion, recorded and republished.
+  OpenCookie does not determine, validate or endorse it. Consent to store or
+  read something on a device is a separate question from the basis for the
+  processing that follows, and the tool keeps them separate rather than letting
+  one stand in for the other.
+</Aside>
+
+## Consent evidence
+
+The runtime produces a consent receipt for every decision and hands it to a
+receipt sink you provide. These commands keep those receipts on your side: they
+store them, find them, hand them over, erase them, and expire them.
+
+Receipts identify a visitor pseudonymously and record what they chose, so they
+are personal data. The store at `opencookie/consent-evidence.json` is created
+readable and writable by its owner only, and it stays that way when later
+rewritten. An export file is created the same way.
+
+| Command                                                             | What it does                                                                                          |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `opencookie evidence ingest --from receipts.json`                   | Adds a JSON list of receipts to the store.                                                            |
+| `opencookie evidence query --consent-id visitor-1`                  | Lists matching receipts. `--since` and `--until` take a date or epoch milliseconds and are inclusive. |
+| `opencookie evidence export --consent-id visitor-1 --out dsar.json` | Writes matching receipts to a new file, for example to answer a data-subject request.                 |
+| `opencookie evidence delete --consent-id visitor-1`                 | Erases every receipt held for one visitor, reports how many, and names earlier exports still holding them. |
+| `opencookie evidence retain --days 365`                             | Removes receipts decided before the retention period.                                                 |
+
+What the commands refuse, so evidence cannot be quietly corrupted:
+
+- **An ingest is all or nothing.** One malformed receipt refuses the whole file,
+  so a partial import can never pass for a complete one.
+- **Only the runtime's receipt shape is accepted.** A receipt carrying an unknown
+  field is refused rather than stored alongside the evidence.
+- **Evidence is never overwritten.** Re-ingesting the same receipt counts it as a
+  duplicate and skips it. A reused idempotency key with different content is
+  refused, because two different records under one key means one is wrong and
+  the store cannot tell which.
+- **A store that fails validation is left exactly as found.** Every command
+  refuses to act on it and says to restore it from a backup.
+
+`delete` and `retain` report the real count. Zero is an honest answer meaning
+nothing was held, not a failure. `retain` never removes a receipt decided at or
+after its cutoff.
+
+Every command refuses an option it does not know, so a misspelt filter such as
+`--consentId` stops the command instead of widening an export or turning an
+erasure into a no-op. `--cwd` works as `--cwd <directory>` or
+`--cwd=<directory>`.
+
+<Aside type="caution">
+  How long to keep consent evidence, and whether to erase it on request, are
+  decisions for you and your advisers. OpenCookie carries out the retention and
+  erasure you choose; it does not determine what the law requires of you.
+</Aside>
+
+## Diagnose a project
+
+Run `opencookie doctor`. It reads the project's persisted state and reports what it finds. It never changes
+what the project enforces, so it is safe to run on a live site or in CI.
+
+Every diagnostic carries a stable reason code, so a script or a support
+conversation can refer to it without quoting prose that may be reworded:
+
+| Code                               | Severity | Meaning                                                                                                  |
+| ---------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `publication-history-unreadable`   | problem  | The publication history exists but does not parse, or its stored policies no longer match their digests. |
+| `no-policy-published`              | problem  | Nothing has been published, so the runtime has no policy to enforce.                                     |
+| `declaration-not-current`          | problem  | The generated declaration describes a publication other than the live one.                               |
+| `findings-inventory-unreadable`    | problem  | The findings file exists but is not an inventory.                                                        |
+| `findings-not-imported`            | advice   | No scan has been imported yet.                                                                           |
+| `findings-unclassified`            | advice   | Findings no decision covers yet, counted as `findings check` applies decisions, so they cannot appear in a declaration. |
+| `declaration-not-generated`        | advice   | A policy is published but no declaration has been written.                                               |
+| `installed-policy-stale`           | problem  | The project's policy module enforces a different version than the live publication.                      |
+| `policy-not-installed`             | advice   | A policy is published but the project has no policy module at the default path.                          |
+| `configuration-purpose-undeclared` | problem  | The configuration binds resources to a purpose the live publication does not declare, so it cannot load. |
+| `plain-html-policy-not-enforced`   | problem  | A plain-HTML page's drop-in enforces its own attributes, not the live publication.                       |
+| `bundle-policy-stale`              | problem  | A bundle passed with `--bundle` carries OpenCookie policy digests, but not the live publication's pair.   |
+| `bundle-policy-unverified`         | problem  | A bundle passed with `--bundle` carries no OpenCookie policy digests at all.                              |
+| `bundle-unreadable`                | problem  | A bundle passed with `--bundle` could not be read, or lies outside the project.                           |
+
+A `problem` exits non-zero; `advice` does not, so a project part-way through
+setup is not reported as broken.
+
+### Check a site that bundles its own integration
+
+`opencookie policy install` records every path it writes, including one given with
+`--out`, in `opencookie/installed-policies.json`. The doctor checks each recorded
+install as well as the default module: a JSON install is current when its
+recorded digests equal the live publication's, and stale otherwise.
+
+A site that bootstraps OpenCookie in its own bundle may also want to check what it
+actually ships, since a bundle can be built from an older install. Pass each
+built file with `--bundle <file>`, as often as needed, relative to the project:
+`opencookie doctor --bundle dist/app.js`. A path outside the project is refused,
+as for every other command. With `--site`, a bundle path is read where you name
+it, like any other file you pass.
+
+For each bundle the doctor looks for the two digests recorded with the live
+publication:
+
+- **Both are present**, even beside older publications' digests: the doctor
+  says the bundle carries the identity of the live publication and drops the
+  `policy-not-installed` advice.
+- **OpenCookie digests are present, but not the live pair:**
+  `bundle-policy-stale`, naming the publication whose identity the bundle does
+  carry when there is one. Install the live policy as JSON and rebuild.
+- **No OpenCookie digests at all:** `bundle-policy-unverified`. The bundle may
+  run OpenCookie, but nothing in it says which publication it was built from.
+  A bundle keeps the digests only when it bootstraps from the installed JSON
+  with `installedPolicy`; one that imports only the `policy` field drops them.
+
+The doctor reports only which publication's identity a bundle carries. Whether
+the page runs that policy is decided by the bootstrap's own check, which
+refuses to mount a policy that does not derive the recorded digests. The doctor
+does not load the page or run the bundle.
+
+<Aside type="tip">
+  `installed-policy-stale` is the one that decides what visitors actually get.
+  The runtime enforces the policy module in the project, not the publication
+  history, so publishing without running `opencookie policy install` leaves
+  visitors deciding against the previous policy while the history says
+  otherwise.
+</Aside>
+
+<Aside type="tip">
+  `declaration-not-current` catches the case that is easiest to miss: publishing
+  a new policy does not regenerate the declaration, so visitors keep seeing the
+  previous one until `opencookie policy declaration` is run again. The doctor
+  fails the build rather than letting the two drift apart quietly.
+</Aside>
+
+## Manage several sites
+
+One project can manage several sites, each with its own policy, findings and
+consent evidence.
+
+| Command                                                                                    | What it does                                               |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `opencookie sites add --name shop --domain shop.example.com --domain www.shop.example.com` | Registers a site and the hostnames it is served from.      |
+| `opencookie sites list`                                                                    | Lists every site, its hostnames, and where its data lives. |
+
+Pass `--site <name>` to `policy`, `findings`, `evidence` or `doctor` to work on
+one site, for example `opencookie evidence query --site shop`. Each site's data
+lives in `opencookie/sites/<name>/`, apart from every other site's: evidence
+ingested for one site never appears in another site's query, and a page scanned
+for one never adds findings to another. Files you pass by path, such as receipts
+to ingest or a page to scan, are still read from where you name them.
+
+What the registry refuses:
+
+- **A hostname belongs to exactly one site.** Registering a hostname another
+  site already has is refused, so it is never unclear which policy and which
+  evidence apply to a visitor on it. Hostnames are compared without regard to
+  case but otherwise exactly: `shop.example.com` and `www.shop.example.com` are
+  different hostnames, and each is registered on its own.
+- **Only a bare hostname is accepted.** A URL, a port, a path or a wildcard is
+  refused rather than trimmed. Give an internationalized name in its `xn--`
+  form.
+- **Once a project has sites, every command names one.** A command without
+  `--site` is refused rather than writing data that belongs to no site, where
+  no site's query would find it. A project with no registered sites works
+  exactly as before.
+- **An unknown site, or `--site` without a name, is refused** rather than
+  falling back to other data.
+- **A registry that fails validation is left exactly as found.** Every command
+  refuses to act on it and says to restore it from a backup.
+
+Data a project held before its first site was registered stays in
+`opencookie/` and belongs to no site. To make it a site's, move those files into
+that site's directory.
+
+<Aside type="caution">
+  The registry separates what OpenCookie stores for each site. It does not
+  change where a visitor's browser keeps their choice. Host-only storage is the
+  default. A consent cookie shared on a parent domain, as described in
+  [Subdomain scope](/recipes/subdomain-scope/), is sent to every host beneath
+  that domain, whichever site those hosts are registered to. Sites whose
+  visitors' choices must stay apart should not share a cookie domain.
+</Aside>
+
+## Serve the operator console
+
+`opencookie serve` starts a self-hosted web surface for the same work, so a
+colleague who does not use a terminal can still manage sites. It is described in
+full in [The operator console](/operating/operator-console/).
+
+| Command                           | What it does                                                      |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `opencookie serve`                | Serves the console on `127.0.0.1:4321` and prints how to sign in. |
+| `opencookie serve --port 8080`    | Serves it on another port.                                        |
+| `opencookie serve --host 0.0.0.0` | Serves it beyond this machine, and says what that means.          |
+| `opencookie serve --behind-proxy` | Believes `X-Forwarded-Proto` from a proxy that terminates TLS.    |
+
+Set `OPENCOOKIE_OPERATOR_TOKEN` to choose the token, at least 32 characters;
+otherwise one is generated for the run and printed once. A token you supply is
+never printed. Repeated wrong tokens are slowed with `429` and `Retry-After`. The console
+binds loopback unless `--host` says otherwise, refuses a port outside 1 to
+65535, and refuses a request body over 64 KiB.
+
+## What the commands refuse
+
+Each of these exits non-zero and writes nothing:
+
+- Publishing a policy whose identity already matches the live publication, rather
+  than reporting a change that did not happen.
+- Reusing a publication identifier that already exists.
+- Rolling back to an identifier that is not in the history.
+- Reading or writing a history whose stored policies no longer match their
+  recorded digests. The stored document is left exactly as it was found.
+
+<Aside type="note">
+  OpenCookie is a technical tool. Publishing a policy records an operator
+  decision and its history. It does not determine a lawful basis, certify a
+  site, or establish regulatory compliance.
+</Aside>
