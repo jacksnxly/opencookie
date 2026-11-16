@@ -60,3 +60,14 @@ test("every job runs in the pinned Playwright image with pinned actions", async 
     assert.match(reference, /^[0-9a-f]{40}$/u, reference);
   }
 });
+
+test("every job container runs under an init process that reaps orphans", async () => {
+  // GitHub starts job containers with `tail -f /dev/null` as PID 1. Without
+  // --init, killed test children stay zombies and still answer kill(pid, 0).
+  const workflow = await readFile(workflowUrl, "utf8");
+  const containers = workflow.match(/^ {4}container:$/gmu) ?? [];
+  const options = workflow.match(/^ {6}options: .*$/gmu) ?? [];
+  assert.ok(containers.length >= 3, "the workflow runs its jobs in containers");
+  assert.equal(options.length, containers.length);
+  for (const line of options) assert.match(line, /(?:^|\s)--init(?:\s|$)/u);
+});
