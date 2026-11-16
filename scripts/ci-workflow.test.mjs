@@ -48,16 +48,13 @@ test("every job runs in the pinned Playwright image with pinned actions", async 
     /mcr[.]microsoft[.]com\/playwright:v1[.]62[.]1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e/u,
   );
   assert.match(workflow, /node-version: 24[.]19[.]0/u);
-  assert.match(
-    workflow,
-    /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/u,
-  );
-  assert.match(
-    workflow,
-    /pnpm\/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86/u,
-  );
-  for (const [, reference] of workflow.matchAll(/uses: [^@\s]+@(\S+)/gu)) {
-    assert.match(reference, /^[0-9a-f]{40}$/u, reference);
+  // Dependabot moves the pins; the test only requires that they are pins.
+  const actions = [...workflow.matchAll(/uses: ([^@\s]+)@(\S+)/gu)];
+  const names = new Set(actions.map(([, name]) => name));
+  assert.ok(names.has("actions/checkout"), "checks out with actions/checkout");
+  assert.ok(names.has("pnpm/action-setup"), "installs pnpm with its action");
+  for (const [, name, reference] of actions) {
+    assert.match(reference, /^[0-9a-f]{40}$/u, `${name}@${reference}`);
   }
 });
 
