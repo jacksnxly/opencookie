@@ -10,6 +10,8 @@ overrides:
   qs@>=6.0.0 <6.16.2: 6.16.2
   srvx@0.10.1: 0.11.22
 
+packageExtensionsChecksum: sha256-/TBVhIIewKyZgF8mV4DpJzy213m7q5fYzn+Bu/jnAcM=
+
 importers:
 
   .:
@@ -11036,6 +11038,7 @@ snapshots:
 
   '@nuxt/kit@4.5.2(magic-string@1.4.5)(magicast@0.5.5)(oxc-parser@0.146.0)(rolldown@1.2.5)(unplugin@3.7.0(esbuild@0.28.2)(rolldown@1.2.19)(rollup@4.68.3)(vite@8.3.8(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.1)))':
     dependencies:
+      '@nuxt/schema': 4.5.2
       c12: 3.3.4(magicast@0.5.5)
       consola: 3.4.2
       defu: 6.1.7
