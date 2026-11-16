@@ -18,8 +18,8 @@
     "@opencookie-dev/vanilla": "workspace:*"
   },
   "devDependencies": {
-    "@astrojs/check": "0.9.10",
-    "@astrojs/node": "11.1.4",
+    "@astrojs/check": "0.9.12",
+    "@astrojs/node": "11.1.13",
     "astro": "7.2.4",
     "typescript": "6.0.3"
   },
