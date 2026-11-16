@@ -13,8 +13,8 @@
     "@opencookie-dev/core": "workspace:*",
     "@opencookie-dev/nuxt": "workspace:*",
     "@opencookie-dev/vanilla": "workspace:*",
-    "nuxt": "4.5.2",
-    "vue": "3.5.41",
+    "nuxt": "4.6.4",
+    "vue": "3.5.45",
     "vue-router": "5.3.1"
   },
   "devDependencies": {

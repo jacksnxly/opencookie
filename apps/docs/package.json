@@ -13,20 +13,20 @@
   },
   "dependencies": {
     "@astrojs/starlight": "0.41.7",
-    "astro": "7.2.4"
+    "astro": "7.4.12"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
-    "@nuxt/kit": "4.5.2",
+    "@nuxt/kit": "4.6.4",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
-    "happy-dom": "20.11.6",
-    "nuxt": "4.5.2",
+    "happy-dom": "21.0.4",
+    "nuxt": "4.6.4",
     "react": "19.2.8",
-    "sharp": "0.35.3",
-    "svelte": "5.56.10",
+    "sharp": "0.35.5",
+    "svelte": "5.57.3",
     "tsx": "4.23.12",
     "typescript": "5.9.3",
-    "vue": "3.5.41"
+    "vue": "3.5.45"
   }
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import FixturePage from "$lib/FixturePage.svelte";
+  import FixturePage from "#lib/FixturePage.svelte";
 </script>
 
 <FixturePage />

@@ -11,7 +11,7 @@ import {
 // install check scaffolds a Next.js 15 App Router app as well as Next.js 16.
 
 describe("the Next.js 15 packed DX case", () => {
-  it("scaffolds a Next.js 15.5.9 App Router app with pinned, shell-free flags", () => {
+  it("scaffolds a Next.js 15.5.29 App Router app with pinned, shell-free flags", () => {
     const definition = DX_CASES.find(({ id }) => id === "next15-app");
     assert.ok(definition, "next15-app is a DX case");
     const next16 = DX_CASES.find(({ id }) => id === "next-app");
@@ -22,7 +22,7 @@ describe("the Next.js 15 packed DX case", () => {
     assert.equal(definition.scaffold.command, "pnpm");
     assert.deepEqual(definition.scaffold.args, [
       "dlx",
-      "create-next-app@15.5.9",
+      "create-next-app@15.5.29",
       ".",
       "--ts",
       "--no-eslint",

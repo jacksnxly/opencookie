@@ -63,11 +63,11 @@
     "@stryker-mutator/core": "10.0.0",
     "@stryker-mutator/typescript-checker": "10.0.0",
     "@stryker-mutator/vitest-runner": "10.0.0",
-    "@vitest/coverage-v8": "4.1.11",
+    "@vitest/coverage-v8": "4.1.12",
     "dependency-cruiser": "18.2.0",
     "eslint": "10.9.0",
     "globals": "17.11.0",
-    "happy-dom": "20.11.6",
+    "happy-dom": "21.0.4",
     "prettier": "3.9.6",
     "publint": "0.3.24",
     "size-limit": "13.0.3",
@@ -75,6 +75,6 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.67.0",
     "verdaccio": "6.10.0",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   }
 }

@@ -92,5 +92,5 @@ All references were accessed on 2026-08-22.
 - [Template directives, including `client:load`](https://docs.astro.build/en/reference/directives-reference/)
 - [On-demand rendering and SSR](https://docs.astro.build/en/guides/on-demand-rendering/)
 
-The package is tested against Astro 7.2.4, the stable registry release observed
-on 2026-08-22.
+The package is tested against Astro 7.4.12, the stable registry release observed
+on 2026-11-16.

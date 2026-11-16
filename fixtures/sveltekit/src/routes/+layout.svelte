@@ -3,7 +3,7 @@
 	import { setOpenCookieContext } from "@opencookie-dev/svelte";
 
 	import "../app.css";
-	import { createFixtureOpenCookieStore } from "$lib/opencookie-store";
+	import { createFixtureOpenCookieStore } from "#lib/opencookie-store";
 
 	let { children } = $props();
 	const store = createFixtureOpenCookieStore();

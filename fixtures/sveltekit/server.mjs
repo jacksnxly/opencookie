@@ -75,7 +75,7 @@ function strictPolicy(nonce) {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' ${tracker}`,
-    // SvelteKit 2.70.3's route announcer has this exact accessibility style.
+    // SvelteKit's route announcer has this exact accessibility style.
     `style-src 'self' 'nonce-${nonce}' 'unsafe-hashes' 'sha256-S8qMpvofolR8Mpjy4kQvEm7m1q8clzU4dfDH0AmvZjo='`,
     `frame-src ${tracker}`,
     "connect-src 'self'",

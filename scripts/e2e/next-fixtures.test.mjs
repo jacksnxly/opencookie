@@ -505,7 +505,7 @@ describe("Next production fixtures", () => {
         manifest.dependencies["@opencookie-dev/vanilla"],
         "workspace:*",
       );
-      assert.equal(manifest.dependencies.next, "16.3.2");
+      assert.equal(manifest.dependencies.next, "16.4.6");
       assert.equal(manifest.scripts.build, "next build");
       assert.equal(manifest.scripts.start, "node server.mjs");
       assert.match(runtime, /@opencookie-dev\/next/u);
