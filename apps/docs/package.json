@@ -12,11 +12,11 @@
     "verify": "node --test ../../scripts/verify-docs.test.mjs && node ../../scripts/verify-docs-generate-api.mjs --check && astro check && astro build && node ../../scripts/verify-docs-samples.mjs && node ../../scripts/verify-docs.mjs"
   },
   "dependencies": {
-    "@astrojs/starlight": "0.41.7",
+    "@astrojs/starlight": "0.43.1",
     "astro": "7.4.12"
   },
   "devDependencies": {
-    "@astrojs/check": "0.9.10",
+    "@astrojs/check": "0.9.12",
     "@nuxt/kit": "4.6.4",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",

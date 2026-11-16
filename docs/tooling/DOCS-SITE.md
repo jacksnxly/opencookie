@@ -5,7 +5,7 @@ Accessed 2026-08-22.
 ## Versions
 
 - Astro `7.4.12` is the current npm `latest` release, verified through the [official npm registry metadata](https://registry.npmjs.org/astro/7.4.12).
-- `@astrojs/starlight` `0.41.7` is the pinned release, verified through the [official npm registry metadata](https://registry.npmjs.org/@astrojs%2fstarlight/0.41.7).
+- `@astrojs/starlight` `0.43.1` is the pinned release, verified through the [official npm registry metadata](https://registry.npmjs.org/@astrojs%2fstarlight/0.43.1).
 - The site uses the exact versions above. It does not use a floating range.
 
 ## Primary implementation sources
