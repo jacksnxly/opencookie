@@ -20,7 +20,10 @@ jobs:
     timeout-minutes: 240
     container:
       image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
-      options: --user 1001
+      # --init: GitHub starts job containers with `tail -f /dev/null` as PID 1,
+      # which never reaps orphans. Killed test children would linger as zombies
+      # and still answer kill(pid, 0), so the DX teardown tests fail.
+      options: --user 1001 --init
     env:
       CI: "1"
       FORCE_COLOR: "1"
@@ -70,7 +73,7 @@ jobs:
     timeout-minutes: 300
     container:
       image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
-      options: --user 1001
+      options: --user 1001 --init
     strategy:
       fail-fast: false
       matrix:
@@ -110,7 +113,7 @@ jobs:
     timeout-minutes: 300
     container:
       image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
-      options: --user 1001
+      options: --user 1001 --init
     env:
       CI: "1"
       FORCE_COLOR: "1"
