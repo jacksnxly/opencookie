@@ -2453,14 +2453,12 @@ function hasSvelteProviderImport(
   content: string,
   scripts: readonly MarkupNode[],
   instanceScript: MarkupNode,
+  specifier: string,
 ): boolean {
   const instance = svelteScriptContent(path, content, instanceScript).parsed;
   if (!(
-    hasDefaultImport(
-      instance,
-      "$lib/OpenCookieProvider.svelte",
-      "OpenCookieProvider",
-    ) && hasExclusiveModuleBinding(instance, "OpenCookieProvider")
+    hasDefaultImport(instance, specifier, "OpenCookieProvider") &&
+    hasExclusiveModuleBinding(instance, "OpenCookieProvider")
   )) {
     return false;
   }
@@ -2535,7 +2533,11 @@ function assertSvelteBindingsAvailable(
   }
 }
 
-function isSvelteWired(path: string, content: string): boolean {
+function isSvelteWired(
+  path: string,
+  content: string,
+  specifier: string,
+): boolean {
   const root = parseSvelteMarkup(path, content);
   const scripts = topLevelSvelteScripts(path, content, root);
   const script = topLevelInstanceScript(path, content, root);
@@ -2543,7 +2545,7 @@ function isSvelteWired(path: string, content: string): boolean {
     return false;
   }
   return (
-    hasSvelteProviderImport(path, content, scripts, script) &&
+    hasSvelteProviderImport(path, content, scripts, script, specifier) &&
     hasExactSvelteProvider(path, content, root) &&
     svelteRenderRanges(path, content).length === 1
   );
@@ -3054,9 +3056,17 @@ async function svelteWiring(
   fileSystem: FileSystemPort,
 ): Promise<WiringChanges> {
   const path = "src/routes/+layout.svelte";
-  const importLine =
-    '  import OpenCookieProvider from "$lib/OpenCookieProvider.svelte";';
-  const generatedContent = `<!-- opencookie:init:generated -->\n<script lang="ts">\n  // opencookie:init:import\n${importLine}\n  // /opencookie:init:import\n  let { children } = $props();\n</script>\n\n<OpenCookieProvider>\n  {@render children()}\n</OpenCookieProvider>\n<!-- /opencookie:init:generated -->\n`;
+  // A relative specifier resolves on SvelteKit 2 and 3 alike: SvelteKit 3
+  // dropped the generated `$lib` alias that earlier releases imported from.
+  const specifier = "../lib/OpenCookieProvider.svelte";
+  const legacySpecifier = "$lib/OpenCookieProvider.svelte";
+  const importLineFor = (from: string) =>
+    `  import OpenCookieProvider from "${from}";`;
+  const generatedContentFor = (line: string) =>
+    `<!-- opencookie:init:generated -->\n<script lang="ts">\n  // opencookie:init:import\n${line}\n  // /opencookie:init:import\n  let { children } = $props();\n</script>\n\n<OpenCookieProvider>\n  {@render children()}\n</OpenCookieProvider>\n<!-- /opencookie:init:generated -->\n`;
+  const importLine = importLineFor(specifier);
+  const legacyImportLine = importLineFor(legacySpecifier);
+  const generatedContent = generatedContentFor(importLine);
   if (!(await fileSystem.exists(path))) {
     return {
       edits: [],
@@ -3069,19 +3079,26 @@ async function svelteWiring(
     };
   }
   const content = await fileSystem.readFile(path);
-  if (content === generatedContent) {
+  // A layout an earlier release wired with the `$lib` import stays as it is.
+  if (
+    content === generatedContent ||
+    content === generatedContentFor(legacyImportLine)
+  ) {
     return { edits: [], files: [{ content, path }] };
   }
+  const wiredSpecifier = content.includes(legacyImportLine)
+    ? legacySpecifier
+    : specifier;
   if (
     validateExistingMarker(
       path,
       content,
       {
-        import: importLine,
+        import: importLineFor(wiredSpecifier),
         provider:
           "<OpenCookieProvider>\n  {@render children()}\n</OpenCookieProvider>",
       },
-      () => isSvelteWired(path, content),
+      () => isSvelteWired(path, content, wiredSpecifier),
     )
   )
     return { edits: [], files: [] };
