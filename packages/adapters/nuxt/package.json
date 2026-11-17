@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "@nuxt/kit": "4.6.4",
-    "@nuxt/schema": "4.6.4",
+    "@nuxt/schema": "4.5.2",
     "@opencookie-dev/core": "workspace:^",
     "@opencookie-dev/vue": "workspace:^"
   },
