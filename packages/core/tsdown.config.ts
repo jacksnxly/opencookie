@@ -6,6 +6,7 @@ const shared = {
   format: ["esm", "cjs"] as const,
   hash: false,
   minify: true,
+  outputOptions: { comments: { annotation: false } },
   platform: "neutral" as const,
   sourcemap: true,
   target: "es2022",

@@ -276,6 +276,4 @@ export interface VanillaOpenCookieMountOptions {
     readonly onError?: (error: unknown) => void;
 }
 
-// (No @packageDocumentation comment for this package)
-
 ```

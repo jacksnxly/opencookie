@@ -449,6 +449,4 @@ export interface StorageLike {
 // @public (undocumented)
 export type StoredConsentInvalidReason = "future-schema" | "invalid-record" | "malformed-json" | "read-failed" | "readback-mismatch";
 
-// (No @packageDocumentation comment for this package)
-
 ```

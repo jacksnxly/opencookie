@@ -23,6 +23,7 @@ export default defineConfig([
     fixedExtension: false,
     hash: false,
     minify: true,
+    outputOptions: { comments: { annotation: false } },
     // V8 explicit compile hint: compile eagerly off the main thread while the
     // script streams, instead of lazily on the main thread at first call.
     // Measured to remove the first-visit long task.

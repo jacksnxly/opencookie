@@ -266,6 +266,4 @@ export interface PurposeDecisionState {
     readonly value: ConsentDecisionState;
 }
 
-// (No @packageDocumentation comment for this package)
-
 ```

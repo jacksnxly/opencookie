@@ -1579,6 +1579,4 @@ export interface UnreachablePurposeIssue {
     readonly path: string;
 }
 
-// (No @packageDocumentation comment for this package)
-
 ```

@@ -1388,6 +1388,4 @@ export type WithdrawConsentResult = {
     readonly record: ConsentRecord;
 };
 
-// (No @packageDocumentation comment for this package)
-
 ```

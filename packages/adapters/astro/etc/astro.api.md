@@ -49,6 +49,4 @@ export default createAstroOpenCookieIntegration;
 // @public
 export function createAstroServerBinding<Snapshot>(store: OpenCookieExternalStore<Snapshot>): AstroOpenCookieServerBinding<Snapshot>;
 
-// (No @packageDocumentation comment for this package)
-
 ```

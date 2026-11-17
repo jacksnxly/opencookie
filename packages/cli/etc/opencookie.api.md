@@ -1336,6 +1336,4 @@ export interface VanillaBrowserAsset {
     readonly integrity: `sha384-${string}`;
 }
 
-// (No @packageDocumentation comment for this package)
-
 ```
