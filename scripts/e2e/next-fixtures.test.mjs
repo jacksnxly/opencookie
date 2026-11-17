@@ -200,12 +200,12 @@ async function verifyBrowserContract(fixture) {
   });
   const proxyPort = await listen(proxy);
   const { chromium } = await import("@playwright/test");
-  const browser = await chromium.launch({
-    headless: true,
-    proxy: { server: `http://127.0.0.1:${String(proxyPort)}` },
-  });
-
+  let browser;
   try {
+    browser = await chromium.launch({
+      headless: true,
+      proxy: { server: `http://127.0.0.1:${String(proxyPort)}` },
+    });
     const page = await browser.newPage();
     const analyticsRequests = [];
     const runtimeErrors = [];
@@ -416,7 +416,7 @@ async function verifyBrowserContract(fixture) {
     await page.locator("html[data-oc-ready=true]").waitFor();
     await waitForFirstVisitConsentSurface(page);
   } finally {
-    await browser.close();
+    await browser?.close();
     await fixtureServer.close();
   }
 }
