@@ -40,7 +40,7 @@ lawful basis, jurisdiction analysis, vendor behaviour and retention.
 From the root of an existing application:
 
 ```sh
-npx --yes opencookie@0.4.1 init --yes
+npx --yes opencookie@0.4.2 init --yes
 ```
 
 The initializer detects your framework and package manager, installs the

@@ -11,10 +11,10 @@ OpenCookie initializes an existing application. Start from a working framework s
 
 Use Node.js `>=22.12.0` and pnpm `11.22.0` for the pinned fresh-app workflows. This release candidate is verified with Node.js `24.19.0` and pnpm `11.22.0`. Check both before starting with `node --version` and `pnpm --version`.
 
-Each framework guide lists the exact command sequence exercised by the packed-consumer gate. Start in a new empty directory and run the commands in order. `none` means that stack has no install or build command at that stage. The pinned unattended command is `npx --yes opencookie@0.4.1 init --yes`.
+Each framework guide lists the exact command sequence exercised by the packed-consumer gate. Start in a new empty directory and run the commands in order. `none` means that stack has no install or build command at that stage. The pinned unattended command is `npx --yes opencookie@0.4.2 init --yes`.
 
 <Steps>
-1. Run `npx opencookie@0.4.1 init` for an interactive confirmation, or `npx --yes opencookie@0.4.1 init --yes` for an unattended local setup.
+1. Run `npx opencookie@0.4.2 init` for an interactive confirmation, or `npx --yes opencookie@0.4.2 init --yes` for an unattended local setup.
 2. Review `opencookie.policy.ts`, `opencookie.config.ts`, and the generated provider, plugin, integration, or classic-script block. Every shipped starter, including the compact classic-script path, places Analytics under a real `optional` presentation root. First visit renders a fixed bottom bar with equally weighted Reject all, Accept all, and Settings controls. Settings opens a separate modal panel where the `optional` category choice expands through the domain policy to the Analytics purpose. The starter is an example, not a production catalogue; replace its categories, disclosure, and references with the site's actual declaration. A custom programmatic policy with no `presentationRootCategoryIds` keeps the backwards-compatible flat fallback: one purpose section with no category choice. When roots exist, valid purposes outside the visited category graph remain available in a trailing ungrouped section.
 3. Make every optional script and frame inert in the original HTML. A visible banner alone does not prevent a browser request.
 4. Build the application, serve the build, then test first visit, accept, reject, granular save, withdrawal, reload, policy change, expiry, and any configured privacy signals in a real browser.
@@ -51,7 +51,7 @@ The initializer preflights every target before installing or writing. A second c
 On every framework path the install step runs your package manager, so the package manager may also touch its own files. pnpm 11 records newly added packages in `minimumReleaseAgeExclude` in `pnpm-workspace.yaml` and prints what it added. That entry belongs to pnpm, not to OpenCookie, and is expected when a `pnpm-workspace.yaml` is present — including the one the Nuxt and Astro quick starts have you create for the build allowlist.
 
 <Aside type="note" title="Published packages">
-`opencookie@0.4.1`, `@opencookie-dev/vanilla@0.4.0`, `@opencookie-dev/core@0.2.4` and `@opencookie-dev/next@0.2.1` are on the public npm registry, and the other `@opencookie-dev` packages are at 0.2.0. Repository verification installs packed local tarballs of the same source, so it does not depend on the registry.
+`opencookie@0.4.2`, `@opencookie-dev/vanilla@0.4.0`, `@opencookie-dev/core@0.2.4`, `@opencookie-dev/next@0.2.1` and `@opencookie-dev/nuxt@0.2.1` are on the public npm registry, and the other `@opencookie-dev` packages are at 0.2.0. Repository verification installs packed local tarballs of the same source, so it does not depend on the registry.
 </Aside>
 
 ## Framework scaffold references

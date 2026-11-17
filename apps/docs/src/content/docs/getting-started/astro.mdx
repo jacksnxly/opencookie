@@ -13,7 +13,7 @@ Create an empty directory, enter it, then run these exact commands in order. pnp
 - Scaffold: `pnpm dlx create-astro@5.2.3 . --template minimal --no-install --no-git --no-ai --skip-houston --yes`
 - Approve builds: `node --input-type=module --eval 'import { writeFile } from "node:fs/promises"; await writeFile("pnpm-workspace.yaml", Buffer.from("YWxsb3dCdWlsZHM6CiAgImVzYnVpbGQiOiB0cnVlCiAgInNoYXJwIjogdHJ1ZQo=", "base64"), { flag: "wx" });'`
 - Install: `pnpm install --no-frozen-lockfile`
-- Initialize: `npx --yes opencookie@0.4.1 init --yes`
+- Initialize: `npx --yes opencookie@0.4.2 init --yes`
 - Build: `pnpm build`
 - Serve: `pnpm preview --host 127.0.0.1 --port 4173`
 

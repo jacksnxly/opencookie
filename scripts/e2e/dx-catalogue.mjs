@@ -275,7 +275,7 @@ function initInvocation(definition, { registryUrl } = {}) {
   return command("npx", [
     "--yes",
     ...(registryUrl === undefined ? [] : [`--registry=${registryUrl}`]),
-    "opencookie@0.4.1",
+    "opencookie@0.4.2",
     "init",
     "--yes",
     ...(definition.id === "plain-cdn" ? ["--self-host"] : []),

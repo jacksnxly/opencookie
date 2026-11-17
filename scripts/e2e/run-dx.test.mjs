@@ -654,7 +654,7 @@ describe("packed initializer DX lifecycle", () => {
     assert.deepEqual(packedInitializerArguments(DX_CASES[0], registry), [
       "--yes",
       `--registry=${registry}`,
-      "opencookie@0.4.1",
+      "opencookie@0.4.2",
       "init",
       "--yes",
       "--self-host",
@@ -662,7 +662,7 @@ describe("packed initializer DX lifecycle", () => {
     assert.deepEqual(packedInitializerArguments(DX_CASES[1], registry), [
       "--yes",
       `--registry=${registry}`,
-      "opencookie@0.4.1",
+      "opencookie@0.4.2",
       "init",
       "--yes",
     ]);
