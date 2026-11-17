@@ -1,5 +1,12 @@
 # opencookie
 
+## 0.4.2
+
+### Patch Changes
+
+- 63cc9b8: Update `parse5` to 8.1.1, which fixes parser crashes and very slow parses on malformed HTML.
+- 4a088ed: `opencookie init` now wires SvelteKit 3 apps, which no longer provide the `$lib` alias.
+
 ## 0.4.1
 
 ### Patch Changes

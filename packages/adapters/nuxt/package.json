@@ -1,6 +1,6 @@
 {
   "name": "@opencookie-dev/nuxt",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Nuxt module and SSR-safe runtime binding for OpenCookie",
   "license": "MIT",
   "repository": {
