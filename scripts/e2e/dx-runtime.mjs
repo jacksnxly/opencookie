@@ -3305,7 +3305,7 @@ export function packedInitializerArguments(definition, registryUrl) {
   return [
     "--yes",
     `--registry=${registryUrl}`,
-    "opencookie@0.4.1",
+    "opencookie@0.4.2",
     "init",
     "--yes",
     ...(definition.id === "plain-cdn" ? ["--self-host"] : []),

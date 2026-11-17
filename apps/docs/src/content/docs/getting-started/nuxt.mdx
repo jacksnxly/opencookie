@@ -17,7 +17,7 @@ Create an empty directory, enter it, then run these exact commands in order. pnp
 - Scaffold: `pnpm dlx create-nuxt@3.37.0 . --template minimal --force --packageManager pnpm --no-install --gitInit=false`
 - Approve builds: `node --input-type=module --eval 'import { writeFile } from "node:fs/promises"; await writeFile("pnpm-workspace.yaml", Buffer.from("YWxsb3dCdWlsZHM6CiAgImVzYnVpbGQiOiB0cnVlCg==", "base64"), { flag: "wx" });'`
 - Install: `pnpm install --no-frozen-lockfile`
-- Initialize: `npx --yes opencookie@0.4.1 init --yes`
+- Initialize: `npx --yes opencookie@0.4.2 init --yes`
 - Build: `pnpm build`
 - Serve: `node .output/server/index.mjs`
 

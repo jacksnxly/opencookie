@@ -378,7 +378,7 @@ test("root README gives a complete safe entrypoint", async () => {
   );
   const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
 
-  assert.match(readme, /npx --yes opencookie@0\.4\.1 init --yes/u);
+  assert.match(readme, /npx --yes opencookie@0\.4\.2 init --yes/u);
   for (const adapter of [
     "@opencookie-dev/astro",
     "@opencookie-dev/next",
@@ -414,7 +414,7 @@ test("black-box prerequisites pin the verified runtime and unattended initialize
     assert.match(source, /Node\.js `>=22\.12\.0`/u);
     assert.match(source, /Node\.js `24\.19\.0`/u);
     assert.match(source, /pnpm `11\.22\.0`/u);
-    assert.match(source, /npx --yes opencookie@0\.4\.1 init --yes/u);
+    assert.match(source, /npx --yes opencookie@0\.4\.2 init --yes/u);
   }
 });
 
