@@ -9,6 +9,10 @@ interface ResolverPlugin {
 
 interface BuildConfig {
   readonly entry?: Readonly<Record<string, string>>;
+  readonly minify?: boolean;
+  readonly outputOptions?: {
+    readonly comments?: { readonly annotation?: boolean };
+  };
   readonly plugins?: readonly ResolverPlugin[];
 }
 
@@ -34,6 +38,18 @@ describe("application reconciliation build link", () => {
         external: true,
         id: "@opencookie-dev/core/reconciliation",
       });
+    }
+  });
+});
+
+describe("minified core builds", () => {
+  // rolldown 1.3 keeps /* @__PURE__ */ comments in minified output unless
+  // told otherwise; they cost bytes in every bundle a site ships.
+  it("drop annotation comments", () => {
+    const minified = buildConfigs.filter(({ minify }) => minify === true);
+    expect(minified.length).toBeGreaterThan(0);
+    for (const build of minified) {
+      expect(build.outputOptions?.comments?.annotation).toBe(false);
     }
   });
 });
