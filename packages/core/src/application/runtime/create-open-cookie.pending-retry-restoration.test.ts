@@ -161,10 +161,9 @@ function accessOf(
 describe("createOpenCookie pending grant retry and restoration", () => {
   it("restages a persistence-pending decision with its original identity", async () => {
     const memory = firstWriteFailsStore();
-    const broadcast = vi.fn((effect: ConsentRuntimeTransitionEffect) => {
-      void effect;
-      return Promise.resolve();
-    });
+    const broadcast = vi.fn<
+      (effect: ConsentRuntimeTransitionEffect) => Promise<void>
+    >(() => Promise.resolve());
     const receipt = vi.fn<
       (_receipt: unknown, _context?: OpenCookiePortContext) => Promise<void>
     >(() => Promise.resolve());
