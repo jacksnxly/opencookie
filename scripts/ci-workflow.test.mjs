@@ -68,3 +68,32 @@ test("every job container runs under an init process that reaps orphans", async 
   assert.equal(options.length, containers.length);
   for (const line of options) assert.match(line, /(?:^|\s)--init(?:\s|$)/u);
 });
+
+test("pull requests fail on a vulnerable dependency they add", async () => {
+  const workflow = await readFile(workflowUrl, "utf8");
+  const job = /^ {2}dependency-review:\n((?: {4}.*\n|\n)*)/mu.exec(
+    workflow,
+  )?.[1];
+  assert.ok(job, "ci.yml has a dependency-review job");
+  assert.match(job, /^ {4}if: github\.event_name == 'pull_request'$/mu);
+  assert.match(
+    job,
+    /uses: actions\/dependency-review-action@[0-9a-f]{40} # v5[.]/u,
+  );
+  // The default fails on every severity; nothing may lower or mute that.
+  assert.doesNotMatch(job, /fail-on-severity|warn-only|vulnerability-check/u);
+  // It skips exactly the advisories pnpm-workspace.yaml accepts, with reasons.
+  const workspace = await readFile(
+    new URL("../pnpm-workspace.yaml", import.meta.url),
+    "utf8",
+  );
+  const accepted = [...workspace.matchAll(/^ {4}- (GHSA-[\w-]+)$/gmu)]
+    .map(([, id]) => id)
+    .sort();
+  const allowed = (/^ {10}allow-ghsas: (.*)$/mu.exec(job)?.[1] ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .sort();
+  assert.deepEqual(allowed, accepted);
+});
