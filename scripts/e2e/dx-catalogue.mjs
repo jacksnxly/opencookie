@@ -564,7 +564,7 @@ export function passCInnerCommand(
           "-D",
           "--save-exact",
           "--ignore-scripts",
-          "@playwright/test@1.62.1",
+          "@playwright/test@1.65.1",
         ])
       : command("npm", [
           "install",
@@ -573,7 +573,7 @@ export function passCInnerCommand(
           "--ignore-scripts",
           "--no-audit",
           "--no-fund",
-          "@playwright/test@1.62.1",
+          "@playwright/test@1.65.1",
         ]);
   }
   if (id === "browser-setup") {
