@@ -172,20 +172,24 @@ test("no accepted advisory names a dependency a published package ships", () => 
   }
 });
 
-test("every accepted advisory names the package it affects", () => {
-  // The test above only sees advisories whose comment names a package.
-  const workspace = readFileSync(
+test("every accepted advisory is written the one way the check above reads", () => {
+  // The check above reads only "    - GHSA-…" lines right under a
+  // "    # <package>: <reason>" comment. pnpm also accepts quoted, lowercase or
+  // commented entries, which would skip it, so no other spelling is allowed.
+  const lines = readFileSync(
     path.join(root, "pnpm-workspace.yaml"),
     "utf8",
+  ).split("\n");
+  const entries = lines.flatMap((line, index) =>
+    /\b(?:ghsa|cve)-/iu.test(line) && !/^\s*#/u.test(line) ? [index] : [],
   );
-  const ignore = /^audit:\n {2}ignore:\n((?: {4}.*\n)*)/mu.exec(workspace);
-  assert.ok(
-    ignore,
-    "pnpm-workspace.yaml accepts advisories under audit.ignore",
-  );
-  const lines = ignore[1].trimEnd().split("\n");
-  lines.forEach((line, index) => {
-    if (!line.startsWith("    - ")) return;
-    assert.match(lines[index - 1] ?? "", /^ {4}# @?[\w./-]+: \S/u, line.trim());
-  });
+  assert.ok(entries.length > 0, "pnpm-workspace.yaml accepts advisories");
+  for (const index of entries) {
+    assert.match(lines[index], /^ {4}- GHSA-[\w-]+$/u, lines[index]);
+    assert.match(
+      lines[index - 1] ?? "",
+      /^ {4}# @?[\w./-]+: \S/u,
+      lines[index],
+    );
+  }
 });
