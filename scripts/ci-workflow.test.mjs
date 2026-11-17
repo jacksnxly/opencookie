@@ -97,3 +97,26 @@ test("pull requests fail on a vulnerable dependency they add", async () => {
     .sort();
   assert.deepEqual(allowed, accepted);
 });
+
+test("CI runs the browsers of the Playwright version the workspace installs", async () => {
+  const workflow = await readFile(workflowUrl, "utf8");
+  const manifest = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  const version = manifest.devDependencies["@playwright/test"];
+  assert.match(version, /^\d+\.\d+\.\d+$/u);
+  const image = new RegExp(
+    `^ {6}image: mcr[.]microsoft[.]com/playwright:v${version.replaceAll(".", "[.]")}-noble@sha256:[0-9a-f]{64}$`,
+    "u",
+  );
+  const images = workflow.match(/^ {6}image: .*$/gmu) ?? [];
+  assert.ok(images.length >= 3, "every job names its container image");
+  for (const line of images) assert.match(line, image);
+  const catalogue = await readFile(
+    new URL("e2e/dx-catalogue.mjs", import.meta.url),
+    "utf8",
+  );
+  const pins = [...catalogue.matchAll(/"@playwright\/test@([^"]+)"/gu)];
+  assert.ok(pins.length > 0, "the DX catalogue installs @playwright/test");
+  for (const [, pin] of pins) assert.equal(pin, version);
+});
