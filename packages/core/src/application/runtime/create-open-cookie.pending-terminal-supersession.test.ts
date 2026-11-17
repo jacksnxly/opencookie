@@ -505,8 +505,9 @@ describe("createOpenCookie pending terminal supersession", () => {
     async (action, _signalCase, failingPort, diagnostic) => {
       const memory = firstWriteFailsStore();
       let broadcastCalls = 0;
-      const broadcast = vi.fn((effect: ConsentRuntimeTransitionEffect) => {
-        void effect;
+      const broadcast = vi.fn<
+        (effect: ConsentRuntimeTransitionEffect) => Promise<void>
+      >(() => {
         broadcastCalls += 1;
         if (failingPort === "broadcast" && broadcastCalls === 2) {
           // This regression deliberately exercises a rejection without a reason.
@@ -516,8 +517,9 @@ describe("createOpenCookie pending terminal supersession", () => {
         return Promise.resolve();
       });
       let reconcileCalls = 0;
-      const reconcile = vi.fn((effect: ConsentRuntimeTransitionEffect) => {
-        void effect;
+      const reconcile = vi.fn<
+        (effect: ConsentRuntimeTransitionEffect) => Promise<void>
+      >(() => {
         reconcileCalls += 1;
         if (failingPort === "reconcile" && reconcileCalls === 2) {
           // This regression deliberately exercises a rejection without a reason.

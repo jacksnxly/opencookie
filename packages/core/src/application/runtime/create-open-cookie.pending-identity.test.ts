@@ -46,15 +46,13 @@ describe("createOpenCookie pending grant identity", () => {
   it("retries a failed first-grant attempt without regenerating identity", async () => {
     let writes = 0;
     const generatedKinds: string[] = [];
-    const broadcast = vi.fn((effect: ConsentRuntimeTransitionEffect) => {
-      void effect;
-      return Promise.resolve();
-    });
+    const broadcast = vi.fn<
+      (effect: ConsentRuntimeTransitionEffect) => Promise<void>
+    >(() => Promise.resolve());
     const receipt = vi.fn(() => Promise.resolve());
-    const reconcile = vi.fn((effect: ConsentRuntimeTransitionEffect) => {
-      void effect;
-      return Promise.resolve();
-    });
+    const reconcile = vi.fn<
+      (effect: ConsentRuntimeTransitionEffect) => Promise<void>
+    >(() => Promise.resolve());
     const store: DecisionStore = {
       clear: () => Promise.resolve(),
       clearIfCurrent: () => Promise.resolve("cleared"),

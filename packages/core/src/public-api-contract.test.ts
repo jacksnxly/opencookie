@@ -52,6 +52,6 @@ it("publishes reconciliation separately while retaining root result types", () =
   expectTypeOf(createPolicyReconciler()).toEqualTypeOf<PolicyReconciler>();
 
   expectTypeOf<ApplicationOpenCookieOptions>();
-  void ApplicationPolicyReconciler;
-  void (undefined as RootPendingGrantRetryResult | undefined);
+  expectTypeOf(ApplicationPolicyReconciler);
+  expectTypeOf<RootPendingGrantRetryResult>();
 });

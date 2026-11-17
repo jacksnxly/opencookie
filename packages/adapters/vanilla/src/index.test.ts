@@ -650,16 +650,13 @@ describe("mountOpenCookie", () => {
     const resolveDependencies = vi.fn(
       (_policy: unknown, purposeId: string) => [purposeId] as const,
     );
-    const resolveSelection = vi.fn(
+    const resolveSelection = vi.fn<
       (
-        _policy: unknown,
+        policy: unknown,
         purposeIds: readonly string[],
-        _mode: "complete" | "supported",
-      ) => {
-        void _mode;
-        return Object.freeze([...purposeIds]);
-      },
-    );
+        mode: "complete" | "supported",
+      ) => readonly string[]
+    >((_policy, purposeIds) => Object.freeze([...purposeIds]));
     const expandCategories = vi.fn(
       (_policy: unknown, categoryIds: readonly string[]) =>
         categoryIds.includes("root")

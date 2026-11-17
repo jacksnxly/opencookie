@@ -27,7 +27,7 @@ function externalStore(
 function renderProvider(
   store: OpenCookieExternalStore<TestSnapshot>,
   consume: () => void,
-): void {
+): string {
   const Consumer: Component = () => {
     consume();
     return {};
@@ -37,7 +37,7 @@ function renderProvider(
     return Consumer(internals, props);
   };
 
-  void render(Provider).body;
+  return render(Provider).body;
 }
 
 describe("Svelte external-store context", () => {
