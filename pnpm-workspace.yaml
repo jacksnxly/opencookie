@@ -11,8 +11,6 @@ allowBuilds:
 linkWorkspacePackages: false
 audit:
   ignore:
-    # deepmerge: withdrawn upstream, no patched release.
-    - GHSA-gcqx-w48m-w2h4
     # minimatch: the only fix is minimatch 11, which Verdaccio (local test registry) cannot run on.
     - GHSA-g3hv-75wg-m249
 overrides:
