@@ -45,7 +45,7 @@ test("every job runs in the pinned Playwright image with pinned actions", async 
   const workflow = await readFile(workflowUrl, "utf8");
   assert.match(
     workflow,
-    /mcr[.]microsoft[.]com\/playwright:v1[.]62[.]1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e/u,
+    /mcr[.]microsoft[.]com\/playwright:v\d+[.]\d+[.]\d+-noble@sha256:[0-9a-f]{64}/u,
   );
   assert.match(workflow, /node-version: 24[.]19[.]0/u);
   // Dependabot moves the pins; the test only requires that they are pins.
