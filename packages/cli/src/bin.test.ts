@@ -54,7 +54,7 @@ it("ships a publishable manifest for npx consumers", async () => {
     version?: string;
   };
   expect(manifest.private).not.toBe(true);
-  expect(manifest.version).toBe("0.4.1");
+  expect(manifest.version).toBe("0.4.2");
   expect(manifest.publishConfig?.access).toBe("public");
   expect(manifest.dependencies?.["@opencookie-dev/vanilla"]).toBe(
     "workspace:^",

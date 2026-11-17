@@ -1,6 +1,6 @@
 {
   "name": "opencookie",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Initialize OpenCookie in supported web applications",
   "license": "MIT",
   "repository": {
