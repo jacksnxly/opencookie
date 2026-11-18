@@ -13,6 +13,8 @@ audit:
   ignore:
     # minimatch: the only fix is minimatch 11, which Verdaccio (local test registry) cannot run on.
     - GHSA-g3hv-75wg-m249
+    # picomatch: no fixed release yet (<=4.0.7); only dev tools and @nuxt/kit's file globbing reach it, never with attacker-written patterns. Drop it with the fixed version.
+    - GHSA-fc5q-39xc-vjpf
 overrides:
   "cookie@0.6.0": 0.7.2
   "fast-uri@>=3.0.0 <3.1.9": 3.1.9
