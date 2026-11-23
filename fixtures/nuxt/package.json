@@ -15,7 +15,7 @@
     "@opencookie-dev/vanilla": "workspace:*",
     "nuxt": "4.6.4",
     "vue": "3.5.45",
-    "vue-router": "5.3.1"
+    "vue-router": "5.5.1"
   },
   "devDependencies": {
     "@nuxt/cli": "4.0.3"
